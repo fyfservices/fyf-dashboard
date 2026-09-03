@@ -215,3 +215,10 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
   .view { padding: 14px; }
   .header { padding: 0 14px; }
 }
+
+/* Edit button */
+.btn-edit{background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:4px;font-size:13px;}
+.btn-edit:hover{color:var(--blue);background:var(--bbg);}
+
+/* Pipeline activa tachada */
+.pipe-tachada{opacity:0.7;}
