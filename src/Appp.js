@@ -528,7 +528,7 @@ function PipelineView({pipeline, clients, fetchAll}) {
   const [filter, setFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [editingPipe, setEditingPipe] = useState(null)
-  const [form, setForm] = useState({client_name:'',property:'',stage:'guiones',owner:'felipe',days_in_stage:0,note:''})
+  const [form, setForm] = useState({client_name:'',property:'',campaign_type:'venta',stage:'guiones',owner:'felipe',days_in_stage:0,budget_daily:0,geo:'',note:''})
 
   // Separar activas de las que están en proceso
   const inProgress = pipeline.filter(p=>p.stage!=='activa')
@@ -545,7 +545,7 @@ function PipelineView({pipeline, clients, fetchAll}) {
 
   const openEdit = (item) => {
     setEditingPipe(item.id)
-    setForm({client_name:item.client_name,property:item.property,stage:item.stage,owner:item.owner,days_in_stage:item.days_in_stage,note:item.note||''})
+    setForm({client_name:item.client_name,property:item.property,campaign_type:item.campaign_type||'venta',stage:item.stage,owner:item.owner,days_in_stage:item.days_in_stage,budget_daily:item.budget_daily||0,geo:item.geo||'',note:item.note||''})
     setShowForm(true)
   }
 
@@ -557,7 +557,7 @@ function PipelineView({pipeline, clients, fetchAll}) {
     } else {
       await supabase.from('pipeline').insert(form)
     }
-    setForm({client_name:'',property:'',stage:'guiones',owner:'felipe',days_in_stage:0,note:''})
+    setForm({client_name:'',property:'',campaign_type:'venta',stage:'guiones',owner:'felipe',days_in_stage:0,budget_daily:0,geo:'',note:''})
     setShowForm(false)
     fetchAll()
   }
@@ -589,6 +589,11 @@ function PipelineView({pipeline, clients, fetchAll}) {
             </div>
           )}
           {isActiva&&<span className="badge" style={{background:'var(--gbg)',color:'var(--green)',border:'1px solid var(--gbd)',fontSize:11,marginTop:4,display:'inline-block'}}>✓ Activa — {p.days_in_stage}d corriendo</span>}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+            {p.campaign_type&&<span className="badge b-normal" style={{fontSize:10}}>{({venta:'Venta',captacion:'Captación leads',reclutamiento:'Reclutamiento',alquiler:'Alquiler'})[p.campaign_type]||p.campaign_type}</span>}
+            {p.geo&&<span className="badge b-normal" style={{fontSize:10}}>📍 {p.geo}</span>}
+            {p.budget_daily>0&&<span className="badge b-normal" style={{fontSize:10}}>💰 ${p.budget_daily}/día</span>}
+          </div>
           {p.note&&<div className="pipe-note">{p.note}</div>}
         </div>
         <div className="pipe-right">
@@ -626,12 +631,23 @@ function PipelineView({pipeline, clients, fetchAll}) {
             <div className="form-field"><label>Cliente *</label><input value={form.client_name} onChange={e=>setForm({...form,client_name:e.target.value})} placeholder="Nombre del cliente"/></div>
             <div className="form-field"><label>Propiedad / Campaña *</label><input value={form.property} onChange={e=>setForm({...form,property:e.target.value})} placeholder="ej: Insignia 10"/></div>
           </div>
+          <div className="form-grid">
+            <div className="form-field"><label>Tipo de campaña</label>
+              <select value={form.campaign_type} onChange={e=>setForm({...form,campaign_type:e.target.value})}>
+                <option value="venta">Venta</option>
+                <option value="captacion">Captación de leads</option>
+                <option value="reclutamiento">Reclutamiento de agentes</option>
+                <option value="alquiler">Alquiler</option>
+              </select>
+            </div>
+            <div className="form-field"><label>Delimitación geográfica</label><input value={form.geo} onChange={e=>setForm({...form,geo:e.target.value})} placeholder="ej: Argentina, Paraguay"/></div>
+          </div>
           <div className="form-grid cols3">
             <div className="form-field"><label>Etapa</label><select value={form.stage} onChange={e=>setForm({...form,stage:e.target.value})}>{STAGE_ORDER.map(s=><option key={s} value={s}>{STAGE_LABELS[s]}</option>)}</select></div>
             <div className="form-field"><label>Responsable</label><select value={form.owner} onChange={e=>setForm({...form,owner:e.target.value})}><option value="felipe">Felipe</option><option value="christian">Christian</option><option value="cliente">Cliente</option></select></div>
-            <div className="form-field"><label>Días en etapa</label><input type="number" value={form.days_in_stage} onChange={e=>setForm({...form,days_in_stage:Number(e.target.value)})}/></div>
+            <div className="form-field"><label>Presupuesto diario (USD)</label><input type="number" value={form.budget_daily} onChange={e=>setForm({...form,budget_daily:Number(e.target.value)})} placeholder="0"/></div>
           </div>
-          <div className="form-field" style={{marginBottom:10}}><label>Nota</label><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="ej: Grabo 3 videos, falta España"/></div>
+          <div className="form-field" style={{marginBottom:10}}><label>Nota</label><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="ej: Grabó 3 videos, falta España"/></div>
           <div className="form-actions"><button className="btn-cancel" onClick={cancelForm}>Cancelar</button><button className="btn-save" onClick={savePipe}>{editingPipe?'Guardar cambios':'Guardar'}</button></div>
         </div>
       )}
