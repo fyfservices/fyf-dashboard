@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Falta ANTHROPIC_API_KEY' });
 
   try {
-    let texto = req.body?.texto;
+    let texto = typeof req.body === 'string' ? req.body : req.body?.texto;
 
     if (!texto) {
       const docId = req.body?.docId;
