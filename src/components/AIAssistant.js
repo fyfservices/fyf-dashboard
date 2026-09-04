@@ -107,7 +107,7 @@ INSTRUCCIONES IMPORTANTES:
       })
 
       const data = await response.json()
-      const rawText = data.content?.[0]?.text || 'No pude procesar esa solicitud.'
+      const rawText = data.content?.[0]?.text || ('ERROR: ' + JSON.stringify(data).slice(0, 400))
 
       // Check if response contains a task creation command
       const taskMatch = rawText.match(/\[CREAR_TAREA:(.*?)\]/)
