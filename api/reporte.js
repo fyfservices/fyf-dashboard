@@ -39,8 +39,39 @@ export default async function handler(req, res) {
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Falta ANTHROPIC_API_KEY' });
 
   try {
-    const texto = req.body?.texto;
-    if (!texto) return res.status(400).json({ error: 'Falta el campo texto' });
+    let texto = req.body?.texto;
+
+    if (!texto) {
+      const docId = req.body?.docId;
+      if (!docId) return res.status(400).json({ error: 'Falta texto o docId' });
+      if (!process.env.GOOGLE_API_KEY) return res.status(500).json({ error: 'Falta GOOGLE_API_KEY' });
+
+      const url = `https://docs.googleapis.com/v1/documents/${docId}?includeTabsContent=true&key=${process.env.GOOGLE_API_KEY}`;
+      const dr = await fetch(url);
+      const doc = await dr.json();
+      if (!dr.ok) return res.status(dr.status).json({ error: 'No pude leer el doc', detalle: doc });
+
+      const partes = [];
+      const recorrer = (elems) => {
+        for (const el of elems || []) {
+          if (el.paragraph) {
+            for (const pe of el.paragraph.elements || []) {
+              if (pe.textRun?.content) partes.push(pe.textRun.content);
+            }
+          }
+          if (el.table) {
+            for (const fila of el.table.tableRows || []) {
+              for (const celda of fila.tableCells || []) recorrer(celda.content);
+            }
+          }
+        }
+      };
+      recorrer(doc.body?.content);
+      for (const tab of doc.tabs || []) {
+        recorrer(tab.documentTab?.body?.content);
+      }
+      texto = partes.join('');
+    }
 
     const { fecha, bloque } = recortarSemana(texto);
 
