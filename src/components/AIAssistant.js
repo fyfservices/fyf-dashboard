@@ -100,7 +100,7 @@ INSTRUCCIONES IMPORTANTES:
         },
         body: JSON.stringify({
           model: 'claude-sonnet-5',
-          max_tokens: 1000,
+          max_tokens: 2000,
           system: context,
           messages: [...conversationHistory, { role: 'user', content: userMsg }]
         })
