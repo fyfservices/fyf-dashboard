@@ -3,8 +3,7 @@
   "outputDirectory": "build",
   "framework": "create-react-app",
   "functions": {
-    "api/claude.js": {
-      "maxDuration": 60
-    }
+    "api/claude.js": { "maxDuration": 60 },
+    "api/reporte.js": { "maxDuration": 60 }
   }
 }
