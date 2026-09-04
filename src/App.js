@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from './supabase'
 import './App.css'
+import AIAssistant from './components/AIAssistant'
 
 const GOAL = 10000
 const COLORS = ['#4CAF50','#5B9BD5','#F5C842','#9B7FE8','#26C6DA','#FF8A65','#66BB6A','#EC407A','#AB47BC','#29B6F6','#FFA726','#8D6E63','#78909C','#D4E157','#EF5350','#26A69A','#5C6BC0','#FF7043','#66BB6A','#9E9E9E','#F06292']
@@ -164,6 +165,15 @@ export default function App() {
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
       </main>
+      <AIAssistant
+        clients={clients}
+        ventas={ventas}
+        tasks={tasks}
+        pipeline={pipeline}
+        reports={reports}
+        content={content}
+        fetchAll={fetchAll}
+      />
     </div>
   )
 }
