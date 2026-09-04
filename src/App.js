@@ -152,7 +152,7 @@ export default function App() {
         <span className="header-date">{date}</span>
       </header>
       <nav className="tabs-bar">
-        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'reports',icon:'▤',label:'Reportes'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'}].map(t => (
+        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'analytics',icon:'▤',label:'Analytics'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'}].map(t => (
           <button key={t.id} className={`tab-btn ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
             <span>{t.icon}</span>{t.label}
           </button>
@@ -160,7 +160,7 @@ export default function App() {
       </nav>
       <main>
         {tab==='tasks' && <TasksView tasks={tasks} fetchAll={fetchAll}/>}
-        {tab==='reports' && <ReportsView reports={reports} fetchAll={fetchAll}/>}
+        {tab==='analytics' && <AnalyticsView/>}
         {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
@@ -288,6 +288,29 @@ function TasksView({tasks, fetchAll}) {
 }
 
 // ── REPORTS ────────────────────────────────────────────────
+function AnalyticsView() {
+  return (
+    <div style={{height:'calc(100vh - 100px)',display:'flex',flexDirection:'column',padding:'0'}}>
+      <div style={{padding:'14px 20px',background:'var(--s1)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>Meta Ads Analytics</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Dashboard de campañas — Christian Ríos</div>
+        </div>
+        <a href="https://script.google.com/macros/s/AKfycbwrDlkAwpkoFMlRKA9Jah5IYkVjT73F1oSY-Im_She-spmCI-3aOLLJQ4UU8FlLT_H_XA/exec" target="_blank" rel="noreferrer"
+          style={{fontSize:12,color:'var(--green)',textDecoration:'none',border:'1px solid var(--gbd)',padding:'4px 10px',borderRadius:6,background:'var(--gbg)'}}>
+          Abrir en pantalla completa ↗
+        </a>
+      </div>
+      <iframe
+        src="https://script.google.com/macros/s/AKfycbwrDlkAwpkoFMlRKA9Jah5IYkVjT73F1oSY-Im_She-spmCI-3aOLLJQ4UU8FlLT_H_XA/exec"
+        style={{flex:1,border:'none',width:'100%',background:'#fff'}}
+        title="Meta Ads Analytics"
+        allow="fullscreen"
+      />
+    </div>
+  )
+}
+
 function ReportsView({reports, fetchAll}) {
   const [showForm, setShowForm] = useState(false)
   const [editingReport, setEditingReport] = useState(null)
