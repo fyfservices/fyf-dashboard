@@ -93,11 +93,13 @@ INSTRUCCIONES IMPORTANTES:
         content: m.text
       }))
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/claude', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5',
           max_tokens: 1000,
           system: context,
           messages: [...conversationHistory, { role: 'user', content: userMsg }]

@@ -160,7 +160,7 @@ export default function App() {
       </nav>
       <main>
         {tab==='tasks' && <TasksView tasks={tasks} fetchAll={fetchAll}/>}
-        {tab==='analytics' && <AnalyticsView/>}
+        {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline}/>}
         {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
@@ -288,25 +288,129 @@ function TasksView({tasks, fetchAll}) {
 }
 
 // ── REPORTS ────────────────────────────────────────────────
-function AnalyticsView() {
+function AnalyticsView({clients, ventas, pipeline}) {
+  const CHRISTIAN_URL = 'https://script.google.com/macros/s/AKfycbwR4NxNLlKoMKcoag58OFQ7yEQnMZTEBU11hVHeghBRFzpG2quBcReaVLzmwnRthf3BFQ/exec'
+  const GOAL = 10000
+  const totalComis = (id) => (ventas||[]).filter(v=>v.client_id===id).reduce((s,v)=>s+Number(v.amount),0)
+  const daysLeft = (d) => d ? Math.ceil((new Date(d)-new Date())/(1000*60*60*24)) : null
+
+  const topClients = [...clients].sort((a,b) => b.leads - a.leads).slice(0,8)
+  const blocked = pipeline.filter(p=>p.stage==='esperando'&&p.days_in_stage>=7)
+  const renewals = clients.filter(c=>{const d=daysLeft(c.end_date);return d!==null&&d<=21&&d>0&&c.estado!=='completo'})
+  const totalLeads = clients.reduce((s,c)=>s+c.leads,0)
+  const totalSpend = clients.reduce((s,c)=>s+Number(c.spend||0),0)
+  const totalComisAll = clients.reduce((s,c)=>s+totalComis(c.id),0)
+  const avgCPL = totalLeads > 0 ? (totalSpend/totalLeads).toFixed(2) : 0
+
   return (
-    <div style={{height:'calc(100vh - 100px)',display:'flex',flexDirection:'column',padding:'0'}}>
-      <div style={{padding:'14px 20px',background:'var(--s1)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+    <div className="view">
+      {/* Header con link a Christian */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>Meta Ads Analytics</div>
-          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Dashboard de campañas — Christian Ríos</div>
+          <h2 style={{fontSize:16,fontWeight:600,color:'var(--text)',marginBottom:4}}>Analytics — Overview</h2>
+          <div style={{fontSize:12,color:'var(--muted)'}}>Datos actualizados desde Supabase</div>
         </div>
-        <a href="https://script.google.com/macros/s/AKfycbwrDlkAwpkoFMlRKA9Jah5IYkVjT73F1oSY-Im_She-spmCI-3aOLLJQ4UU8FlLT_H_XA/exec" target="_blank" rel="noreferrer"
-          style={{fontSize:12,color:'var(--green)',textDecoration:'none',border:'1px solid var(--gbd)',padding:'4px 10px',borderRadius:6,background:'var(--gbg)'}}>
-          Abrir en pantalla completa ↗
+        <a href={CHRISTIAN_URL} target="_blank" rel="noreferrer"
+          style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'var(--gbg)',border:'1px solid var(--gbd)',color:'var(--green)',borderRadius:6,fontSize:13,fontWeight:500,textDecoration:'none'}}>
+          📊 Ver dashboard completo de Christian ↗
         </a>
       </div>
-      <iframe
-        src="https://script.google.com/macros/s/AKfycbwrDlkAwpkoFMlRKA9Jah5IYkVjT73F1oSY-Im_She-spmCI-3aOLLJQ4UU8FlLT_H_XA/exec"
-        style={{flex:1,border:'none',width:'100%',background:'#fff'}}
-        title="Meta Ads Analytics"
-        allow="fullscreen"
-      />
+
+      {/* KPIs globales */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
+        {[
+          {n:clients.length,l:'Clientes activos',c:''},
+          {n:totalLeads.toLocaleString(),l:'Leads totales',c:''},
+          {n:'$'+Math.round(totalSpend).toLocaleString(),l:'Pauta invertida (USD)',c:''},
+          {n:'$'+Math.round(totalComisAll).toLocaleString(),l:'Comisiones generadas',c:'color:var(--green)'},
+        ].map((k,i)=>(
+          <div key={i} className="sum-card">
+            <div className="sum-num" style={k.c?{color:'var(--green)'}:{}}>{k.n}</div>
+            <div className="sum-lbl">{k.l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+
+        {/* Ranking de leads por cliente */}
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Ranking por leads</div>
+          {topClients.map((c,i)=>{
+            const maxLeads = topClients[0]?.leads||1
+            const pct = Math.round(c.leads/maxLeads*100)
+            return (
+              <div key={c.id} style={{marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:3}}>
+                  <span style={{color:'var(--text)',fontWeight:500}}>{c.name.split(' ')[0]}</span>
+                  <span style={{fontFamily:'var(--mono)',color:'var(--muted)'}}>{c.leads} leads</span>
+                </div>
+                <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${pct}%`,background:'var(--green)',borderRadius:2}}/>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Progreso garantía por cliente */}
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Progreso garantía $10K</div>
+          {[...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).slice(0,8).map((c,i)=>{
+            const comis = totalComis(c.id)
+            const pct = Math.min(100,Math.round(comis/GOAL*100))
+            const color = pct>=100?'#4CAF50':pct>=60?'#5B9BD5':pct>=30?'#F5C842':'#E05252'
+            return (
+              <div key={c.id} style={{marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:3}}>
+                  <span style={{color:'var(--text)',fontWeight:500}}>{c.name.split(' ')[0]}</span>
+                  <span style={{fontFamily:'var(--mono)',color}}>{pct}%</span>
+                </div>
+                <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${pct}%`,background:color,borderRadius:2}}/>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        {/* Alertas */}
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Alertas activas</div>
+          {blocked.length===0&&renewals.length===0&&<div style={{fontSize:12,color:'var(--dim)',fontStyle:'italic'}}>Sin alertas activas ✓</div>}
+          {blocked.map(p=>(
+            <div key={p.id} style={{display:'flex',gap:8,padding:'6px 10px',background:'var(--obg)',border:'1px solid var(--obd)',borderRadius:6,marginBottom:6,fontSize:12,color:'var(--orange)'}}>
+              ⚠️ <span><strong>{p.client_name}</strong> — {p.property} lleva {p.days_in_stage}d sin grabar</span>
+            </div>
+          ))}
+          {renewals.map(c=>(
+            <div key={c.id} style={{display:'flex',gap:8,padding:'6px 10px',background:'var(--rbg)',border:'1px solid var(--rbd)',borderRadius:6,marginBottom:6,fontSize:12,color:'var(--red)'}}>
+              🔄 <span><strong>{c.name}</strong> — vence en {daysLeft(c.end_date)} días</span>
+            </div>
+          ))}
+        </div>
+
+        {/* CPL por cliente */}
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>CPL por cliente (USD)</div>
+          {[...clients].filter(c=>c.leads>0&&c.spend>0).sort((a,b)=>(a.spend/a.leads)-(b.spend/b.leads)).slice(0,8).map((c,i)=>{
+            const cpl = (c.spend/c.leads).toFixed(2)
+            const color = cpl<5?'var(--green)':cpl<15?'var(--yellow)':'var(--red)'
+            return (
+              <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid var(--border)',fontSize:12}}>
+                <span style={{color:'var(--text)'}}>{c.name.split(' ')[0]}</span>
+                <span style={{fontFamily:'var(--mono)',color,fontWeight:500}}>${cpl}</span>
+              </div>
+            )
+          })}
+          <div style={{display:'flex',justifyContent:'space-between',padding:'8px 0 0',fontSize:11,color:'var(--muted)'}}>
+            <span>Promedio general</span>
+            <span style={{fontFamily:'var(--mono)',fontWeight:500}}>${avgCPL}</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
