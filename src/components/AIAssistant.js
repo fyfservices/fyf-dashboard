@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { supabase } from './supabase'
+import { supabase } from '../supabase'
 
 const GOAL = 10000
 
