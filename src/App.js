@@ -295,6 +295,7 @@ function TasksView({tasks, fetchAll}) {
 function SemanalPanel({semanal}) {
   const [cliente, setCliente] = useState('todos')
   const [periodo, setPeriodo] = useState('semanal')
+  const [semanaSel, setSemanaSel] = useState('')
 
   if (!semanal || !semanal.length) return null
 
@@ -326,7 +327,9 @@ function SemanalPanel({semanal}) {
     return k.slice(8,10)+'/'+k.slice(5,7)
   }
 
-  const ultimaFecha = base.map(f=>f.fecha).sort().slice(-1)[0]
+  const fechasDisp = [...new Set(base.map(f=>f.fecha))].sort()
+  const ultimaFecha = (periodo==='semanal' && semanaSel && fechasDisp.includes(semanaSel))
+    ? semanaSel : fechasDisp[fechasDisp.length-1]
   const filasUlt = base.filter(f => f.fecha === ultimaFecha)
 
   const agrupar = (filas, campo) => {
@@ -344,8 +347,9 @@ function SemanalPanel({semanal}) {
 
   let empeoraron = []
   if (serie.length > 1 && periodo === 'semanal') {
-    const fechas = [...new Set(base.map(f=>f.fecha))].sort()
-    const fPrev = fechas[fechas.length-2]
+    const idx = fechasDisp.indexOf(ultimaFecha)
+    const fPrev = idx > 0 ? fechasDisp[idx-1] : null
+    if (!fPrev) empeoraron = []
     const prevAgr = {}
     agrupar(base.filter(f=>f.fecha===fPrev), cliente==='todos'?'cliente':'campana')
       .forEach(x => { prevAgr[x.nombre] = x.cpl })
@@ -398,6 +402,9 @@ function SemanalPanel({semanal}) {
         <div style={{display:'flex',gap:8}}>
           <Sel valor={cliente} set={setCliente} opciones={[{v:'todos',l:'Toda la agencia'},...clientes.map(c=>({v:c,l:c}))]}/>
           <Sel valor={periodo} set={setPeriodo} opciones={[{v:'semanal',l:'Semanal'},{v:'mensual',l:'Mensual'},{v:'total',l:'Total'}]}/>
+          {periodo==='semanal' && fechasDisp.length>1 && (
+            <Sel valor={ultimaFecha} set={setSemanaSel} opciones={fechasDisp.slice().reverse().map(f=>({v:f,l:'Semana '+fmt(f)}))}/>
+          )}
         </div>
       </div>
 
@@ -444,16 +451,16 @@ function SemanalPanel({semanal}) {
       <div style={{display:'grid',gridTemplateColumns:empeoraron.length?'1.4fr 1fr':'1fr',gap:12}}>
         <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
           <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>
-            CPL por {cliente==='todos'?'cliente':'campana'} &middot; {fmt(ultimaFecha)}
+            Leads y pauta por {cliente==='todos'?'cliente':'campana'} &middot; {fmt(ultimaFecha)}
           </div>
-          {ranking.map((c,i) => (
+          {ranking.slice().sort((a,b)=>b.leads-a.leads).map((c,i,arr) => (
             <div key={i} style={{marginBottom:10}}>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4,gap:10}}>
                 <span style={{color:'var(--text)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</span>
-                <span style={{fontFamily:'var(--mono)',color:'var(--muted)',whiteSpace:'nowrap'}}>${c.cpl.toFixed(2)} &middot; {c.leads}L</span>
+                <span style={{fontFamily:'var(--mono)',color:'var(--muted)',whiteSpace:'nowrap'}}>{c.leads} leads &middot; ${Math.round(c.spend).toLocaleString()}</span>
               </div>
               <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
-                <div style={{height:'100%',width:(c.cpl/maxCpl*100)+'%',background:i<3?'var(--green)':'var(--border2)',borderRadius:2}}/>
+                <div style={{height:'100%',width:(c.leads/arr[0].leads*100)+'%',background:i<3?'var(--green)':'var(--border2)',borderRadius:2}}/>
               </div>
             </div>
           ))}
