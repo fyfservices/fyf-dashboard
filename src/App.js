@@ -166,7 +166,7 @@ export default function App() {
         {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline}/>}
         {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
-        {tab==='accionables' && <AccionablesView semanal={semanal}/>}
+        {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
       </main>
       <AIAssistant
@@ -665,7 +665,10 @@ function ClientsView({clients, ventas, fetchAll}) {
 }
 
 // ── PIPELINE ───────────────────────────────────────────────
-function AccionablesView({semanal}) {
+function AccionablesView({semanal, fetchAll}) {
+  const [hechos, setHechos] = useState({})
+  const [creando, setCreando] = useState(null)
+
   const ultima = semanal.length ? semanal[0].fecha : null
   const filas = semanal.filter(f => f.fecha === ultima)
 
@@ -689,26 +692,59 @@ function AccionablesView({semanal}) {
   const peso = {alta:0, media:1, baja:2}
   items.sort((a,b) => (peso[a.urgencia] ?? 1) - (peso[b.urgencia] ?? 1))
 
-  const color = u => u==='alta' ? '#dc2626' : u==='media' ? '#d97706' : '#6b7280'
-  const fondo = u => u==='alta' ? '#fef2f2' : u==='media' ? '#fffbeb' : '#f9fafb'
+  const acento = u => u==='alta' ? 'var(--red)' : u==='media' ? '#d97706' : 'var(--muted)'
 
-  if (!items.length) return <div style={{padding:20}}><h2>Accionables de clientes</h2><p style={{color:'#6b7280'}}>Todavia no hay accionables cargados.</p></div>
+  const aTarea = async (it, k) => {
+    setCreando(k)
+    await supabase.from('tasks').insert({
+      title: it.cliente + ' - ' + it.campana + ': ' + it.texto,
+      owner: 'ambos',
+      priority: it.urgencia==='alta' ? 'urgent' : 'normal',
+      note: 'Accionable de la semana ' + ultima,
+      done: false
+    })
+    setCreando(null)
+    setHechos(h => ({...h, [k]: true}))
+    fetchAll()
+  }
+
+  if (!items.length) return (
+    <div style={{padding:20}}>
+      <h2 style={{fontSize:16,fontWeight:600,color:'var(--text)',marginBottom:4}}>Accionables de clientes</h2>
+      <div style={{fontSize:12,color:'var(--muted)'}}>Todavia no hay accionables cargados.</div>
+    </div>
+  )
+
+  const urgentes = items.filter(i=>i.urgencia==='alta').length
+  const pendientes = items.filter((it,i)=>!hechos[i]).length
 
   return (
     <div style={{padding:20}}>
-      <h2 style={{fontSize:16,fontWeight:600,marginBottom:4}}>Accionables de clientes</h2>
-      <p style={{color:'#6b7280',fontSize:13,marginBottom:16}}>
-        Semana del {ultima} &middot; {items.length} accionables &middot; {items.filter(i=>i.urgencia==='alta').length} urgentes
-      </p>
-      {items.map((it,i) => (
-        <div key={i} style={{background:fondo(it.urgencia),borderLeft:'3px solid '+color(it.urgencia),borderRadius:6,padding:'10px 14px',marginBottom:8}}>
-          <div style={{display:'flex',gap:8,alignItems:'baseline',marginBottom:3}}>
-            <span style={{fontSize:11,fontWeight:600,color:color(it.urgencia),textTransform:'uppercase'}}>{it.urgencia}</span>
-            <span style={{fontSize:12,color:'#6b7280'}}>{it.cliente} &middot; {it.campana}</span>
+      <h2 style={{fontSize:16,fontWeight:600,color:'var(--text)',marginBottom:4}}>Accionables de clientes</h2>
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:16}}>
+        Semana del {ultima} &middot; {pendientes} pendientes de {items.length} &middot; {urgentes} urgentes
+      </div>
+      {items.map((it,i) => {
+        const hecho = hechos[i]
+        return (
+          <div key={i} style={{background:'var(--s2)',border:'1px solid var(--border)',borderLeft:'3px solid '+acento(it.urgencia),borderRadius:8,padding:'12px 14px',marginBottom:8,opacity:hecho?0.45:1}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <input type="checkbox" checked={!!hecho} onChange={()=>setHechos(h=>({...h,[i]:!h[i]}))} style={{cursor:'pointer',accentColor:'var(--green)'}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',gap:8,alignItems:'baseline',marginBottom:3,flexWrap:'wrap'}}>
+                  <span style={{fontSize:10,fontWeight:700,color:acento(it.urgencia),textTransform:'uppercase',letterSpacing:'0.06em'}}>{it.urgencia}</span>
+                  <span style={{fontSize:12,color:'var(--muted)'}}>{it.cliente} &middot; {it.campana}</span>
+                </div>
+                <div style={{fontSize:14,color:'var(--text)',textDecoration:hecho?'line-through':'none'}}>{it.texto}</div>
+              </div>
+              <button onClick={()=>aTarea(it,i)} disabled={creando===i||hecho}
+                style={{background:'transparent',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'5px 10px',fontSize:12,cursor:hecho?'default':'pointer',whiteSpace:'nowrap'}}>
+                {creando===i ? '...' : 'A tarea'}
+              </button>
+            </div>
           </div>
-          <div style={{fontSize:14}}>{it.texto}</div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
