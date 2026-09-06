@@ -89,17 +89,19 @@ export default function App() {
   const [reports, setReports] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [content, setContent] = useState([])
+  const [semanal, setSemanal] = useState([])
   const [loading, setLoading] = useState(true)
   const [seeded, setSeeded] = useState(false)
 
   const fetchAll = useCallback(async () => {
-    const [c,v,t,r,p,co] = await Promise.all([
+    const [c,v,t,r,p,co,sem] = await Promise.all([
       supabase.from('clients').select('*').order('created_at'),
       supabase.from('ventas').select('*').order('date'),
       supabase.from('tasks').select('*').order('created_at',{ascending:false}),
       supabase.from('reports').select('*').order('created_at',{ascending:false}),
       supabase.from('pipeline').select('*').order('created_at'),
       supabase.from('content').select('*').order('created_at',{ascending:false}),
+      supabase.from('campaign_weekly').select('*').order('fecha',{ascending:false}),
     ])
     setClients(c.data||[])
     setVentas(v.data||[])
@@ -107,6 +109,7 @@ export default function App() {
     setReports(r.data||[])
     setPipeline(p.data||[])
     setContent(co.data||[])
+    setSemanal(sem.data||[])
     setLoading(false)
   }, [])
 
@@ -152,7 +155,7 @@ export default function App() {
         <span className="header-date">{date}</span>
       </header>
       <nav className="tabs-bar">
-        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'analytics',icon:'▤',label:'Analytics'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'}].map(t => (
+        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'analytics',icon:'▤',label:'Analytics'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'},{id:'accionables',icon:'⚠',label:'Accionables'}].map(t => (
           <button key={t.id} className={`tab-btn ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
             <span>{t.icon}</span>{t.label}
           </button>
@@ -163,6 +166,7 @@ export default function App() {
         {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline}/>}
         {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
+        {tab==='accionables' && <AccionablesView semanal={semanal}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
       </main>
       <AIAssistant
@@ -661,6 +665,54 @@ function ClientsView({clients, ventas, fetchAll}) {
 }
 
 // ── PIPELINE ───────────────────────────────────────────────
+function AccionablesView({semanal}) {
+  const ultima = semanal.length ? semanal[0].fecha : null
+  const filas = semanal.filter(f => f.fecha === ultima)
+
+  const items = []
+  filas.forEach(f => {
+    let acc = f.accionables
+    if (typeof acc === 'string') { try { acc = JSON.parse(acc) } catch(e) { acc = [] } }
+    if (!Array.isArray(acc)) acc = []
+    acc.forEach(a => items.push({
+      texto: typeof a === 'string' ? a : (a.texto || ''),
+      urgencia: (typeof a === 'object' && a.urgencia) ? a.urgencia : 'media',
+      cliente: f.cliente, campana: f.campana
+    }))
+  })
+  filas.forEach(f => {
+    if (f.nota_importante && /pago/i.test(f.nota_importante)) {
+      items.push({texto: f.nota_importante, urgencia: 'alta', cliente: f.cliente, campana: f.campana})
+    }
+  })
+
+  const peso = {alta:0, media:1, baja:2}
+  items.sort((a,b) => (peso[a.urgencia] ?? 1) - (peso[b.urgencia] ?? 1))
+
+  const color = u => u==='alta' ? '#dc2626' : u==='media' ? '#d97706' : '#6b7280'
+  const fondo = u => u==='alta' ? '#fef2f2' : u==='media' ? '#fffbeb' : '#f9fafb'
+
+  if (!items.length) return <div style={{padding:20}}><h2>Accionables de clientes</h2><p style={{color:'#6b7280'}}>Todavia no hay accionables cargados.</p></div>
+
+  return (
+    <div style={{padding:20}}>
+      <h2 style={{fontSize:16,fontWeight:600,marginBottom:4}}>Accionables de clientes</h2>
+      <p style={{color:'#6b7280',fontSize:13,marginBottom:16}}>
+        Semana del {ultima} &middot; {items.length} accionables &middot; {items.filter(i=>i.urgencia==='alta').length} urgentes
+      </p>
+      {items.map((it,i) => (
+        <div key={i} style={{background:fondo(it.urgencia),borderLeft:'3px solid '+color(it.urgencia),borderRadius:6,padding:'10px 14px',marginBottom:8}}>
+          <div style={{display:'flex',gap:8,alignItems:'baseline',marginBottom:3}}>
+            <span style={{fontSize:11,fontWeight:600,color:color(it.urgencia),textTransform:'uppercase'}}>{it.urgencia}</span>
+            <span style={{fontSize:12,color:'#6b7280'}}>{it.cliente} &middot; {it.campana}</span>
+          </div>
+          <div style={{fontSize:14}}>{it.texto}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function PipelineView({pipeline, clients, fetchAll}) {
   const [filter, setFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
