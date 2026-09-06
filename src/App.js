@@ -163,7 +163,7 @@ export default function App() {
       </nav>
       <main>
         {tab==='tasks' && <TasksView tasks={tasks} fetchAll={fetchAll}/>}
-        {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline}/>}
+        {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline} semanal={semanal}/>}
         {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
@@ -292,7 +292,157 @@ function TasksView({tasks, fetchAll}) {
 }
 
 // ── REPORTS ────────────────────────────────────────────────
-function AnalyticsView({clients, ventas, pipeline}) {
+function SemanalPanel({semanal}) {
+  if (!semanal || !semanal.length) return null
+
+  const porFecha = {}
+  semanal.filter(f => f.estado === 'activa').forEach(f => {
+    if (!porFecha[f.fecha]) porFecha[f.fecha] = {fecha:f.fecha, leads:0, spend:0, camps:0}
+    porFecha[f.fecha].leads += Number(f.leads||0)
+    porFecha[f.fecha].spend += Number(f.spend_usd||0)
+    porFecha[f.fecha].camps += 1
+  })
+  const sem = Object.values(porFecha).sort((a,b) => a.fecha.localeCompare(b.fecha))
+  if (sem.length < 2) return null
+  sem.forEach(w => { w.cpl = w.leads ? w.spend / w.leads : 0 })
+
+  const hoy = sem[sem.length-1], prev = sem[sem.length-2]
+  const delta = (a,b) => b ? ((a-b)/b*100) : 0
+  const fmtF = f => f.slice(8,10)+'/'+f.slice(5,7)
+
+  // grafico
+  const W=680, H=170, PL=44, PR=16, PT=14, PB=26
+  const iw = W-PL-PR, ih = H-PT-PB
+  const maxL = Math.max(...sem.map(w=>w.leads))*1.15
+  const maxS = Math.max(...sem.map(w=>w.spend))*1.15
+  const x = i => PL + (sem.length===1 ? iw/2 : (i/(sem.length-1))*iw)
+  const yL = v => PT + ih - (v/maxL)*ih
+  const yS = v => PT + ih - (v/maxS)*ih
+  const linea = f => sem.map((w,i) => (i?'L':'M')+x(i).toFixed(1)+' '+f(w).toFixed(1)).join(' ')
+  const area = sem.map((w,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+yL(w.leads).toFixed(1)).join(' ')
+           + ' L'+x(sem.length-1).toFixed(1)+' '+(PT+ih)+' L'+x(0).toFixed(1)+' '+(PT+ih)+' Z'
+
+  // ultima semana por cliente
+  const ult = semanal.filter(f => f.fecha === hoy.fecha && f.estado === 'activa' && f.cpl_usd)
+  const porCli = {}
+  ult.forEach(f => {
+    if (!porCli[f.cliente]) porCli[f.cliente] = {cliente:f.cliente, leads:0, spend:0}
+    porCli[f.cliente].leads += Number(f.leads||0)
+    porCli[f.cliente].spend += Number(f.spend_usd||0)
+  })
+  const ranking = Object.values(porCli).filter(c=>c.leads>0)
+    .map(c => ({...c, cpl: c.spend/c.leads}))
+    .sort((a,b) => a.cpl - b.cpl)
+  const maxCpl = ranking.length ? Math.max(...ranking.map(c=>c.cpl)) : 1
+
+  // empeoraron
+  const cplPrev = {}
+  semanal.filter(f => f.fecha === prev.fecha && f.estado === 'activa').forEach(f => {
+    if (!cplPrev[f.cliente]) cplPrev[f.cliente] = {leads:0, spend:0}
+    cplPrev[f.cliente].leads += Number(f.leads||0)
+    cplPrev[f.cliente].spend += Number(f.spend_usd||0)
+  })
+  const empeoraron = ranking.map(c => {
+    const p = cplPrev[c.cliente]
+    if (!p || !p.leads) return null
+    const cp = p.spend/p.leads
+    return {cliente:c.cliente, ahora:c.cpl, antes:cp, var: delta(c.cpl, cp)}
+  }).filter(x => x && x.var > 15).sort((a,b) => b.var - a.var)
+
+  const KPI = ({label, valor, variacion, invertido}) => {
+    const sube = variacion >= 0
+    const bueno = invertido ? !sube : sube
+    return (
+      <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'14px 16px'}}>
+        <div style={{fontSize:11,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>{label}</div>
+        <div style={{fontSize:24,fontWeight:600,color:'var(--text)',fontFamily:'var(--mono)',lineHeight:1.1}}>{valor}</div>
+        <div style={{fontSize:12,marginTop:4,color: bueno ? 'var(--green)' : 'var(--red)'}}>
+          {sube?'\u25b2':'\u25bc'} {Math.abs(variacion).toFixed(1)}% vs semana previa
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{marginBottom:24}}>
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:12}}>
+        <h2 style={{fontSize:13,fontWeight:500,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Rendimiento semanal</h2>
+        <span style={{fontSize:11,color:'var(--dim)',fontFamily:'var(--mono)'}}>{fmtF(hoy.fecha)} &middot; {hoy.camps} campanas activas</span>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:16}}>
+        <KPI label="Leads" valor={hoy.leads} variacion={delta(hoy.leads,prev.leads)}/>
+        <KPI label="Pauta USD" valor={'$'+Math.round(hoy.spend).toLocaleString()} variacion={delta(hoy.spend,prev.spend)}/>
+        <KPI label="CPL promedio" valor={'$'+hoy.cpl.toFixed(2)} variacion={delta(hoy.cpl,prev.cpl)} invertido/>
+      </div>
+
+      <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16,marginBottom:16}}>
+        <div style={{display:'flex',gap:16,marginBottom:10,fontSize:11,color:'var(--muted)'}}>
+          <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--green)',marginRight:5}}/>Leads</span>
+          <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--muted)',marginRight:5}}/>Pauta USD</span>
+        </div>
+        <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto',display:'block'}}>
+          <defs>
+            <linearGradient id="gLeads" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#4CAF50" stopOpacity="0.28"/>
+              <stop offset="100%" stopColor="#4CAF50" stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          {[0,0.5,1].map(t => (
+            <line key={t} x1={PL} x2={W-PR} y1={PT+ih*t} y2={PT+ih*t} stroke="#2A302A" strokeWidth="1"/>
+          ))}
+          {[0,0.5,1].map(t => (
+            <text key={'l'+t} x={PL-8} y={PT+ih*t+4} textAnchor="end" fill="#4A574A" fontSize="10" fontFamily="monospace">
+              {Math.round(maxL*(1-t))}
+            </text>
+          ))}
+          <path d={area} fill="url(#gLeads)"/>
+          <path d={linea(w=>yS(w.spend))} fill="none" stroke="#7A8A7A" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>
+          <path d={linea(w=>yL(w.leads))} fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+          {sem.map((w,i) => (
+            <g key={i}>
+              <circle cx={x(i)} cy={yL(w.leads)} r="3.5" fill="#0B0D0B" stroke="#4CAF50" strokeWidth="2"/>
+              <text x={x(i)} y={H-8} textAnchor="middle" fill="#4A574A" fontSize="10" fontFamily="monospace">{fmtF(w.fecha)}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:empeoraron.length?'1.4fr 1fr':'1fr',gap:12}}>
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>CPL por cliente</div>
+          {ranking.map((c,i) => (
+            <div key={i} style={{marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}>
+                <span style={{color:'var(--text)',fontWeight:500}}>{c.cliente}</span>
+                <span style={{fontFamily:'var(--mono)',color:'var(--muted)'}}>${c.cpl.toFixed(2)} &middot; {c.leads}L</span>
+              </div>
+              <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
+                <div style={{height:'100%',width:(c.cpl/maxCpl*100)+'%',background:i<3?'var(--green)':'var(--border2)',borderRadius:2}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {empeoraron.length > 0 && (
+          <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
+            <div style={{fontSize:12,fontWeight:600,color:'var(--red)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>CPL en alza</div>
+            {empeoraron.map((e,i) => (
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'7px 0',borderBottom:i<empeoraron.length-1?'1px solid var(--border)':'none'}}>
+                <span style={{fontSize:12,color:'var(--text)'}}>{e.cliente}</span>
+                <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--red)'}}>
+                  +{e.var.toFixed(0)}% &middot; ${e.ahora.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AnalyticsView({clients, ventas, pipeline, semanal}) {
   const CHRISTIAN_URL = 'https://script.google.com/macros/s/AKfycbwR4NxNLlKoMKcoag58OFQ7yEQnMZTEBU11hVHeghBRFzpG2quBcReaVLzmwnRthf3BFQ/exec'
   const GOAL = 10000
   const totalComis = (id) => (ventas||[]).filter(v=>v.client_id===id).reduce((s,v)=>s+Number(v.amount),0)
@@ -319,6 +469,8 @@ function AnalyticsView({clients, ventas, pipeline}) {
           📊 Ver dashboard completo de Christian ↗
         </a>
       </div>
+
+      <SemanalPanel semanal={semanal}/>
 
       {/* KPIs globales */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
