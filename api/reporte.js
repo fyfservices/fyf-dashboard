@@ -120,6 +120,7 @@ export default async function handler(req, res) {
 
     const salida = filas.map(f => ({
       ...f,
+      accionables_json: JSON.stringify(f.accionables || []),
       fecha,
       spend_usd: f.spend == null ? null : (f.moneda === 'PYG' ? Math.round(f.spend / PYG * 100) / 100 : f.spend),
       cpl_usd: f.cpl == null ? null : (f.moneda === 'PYG' ? Math.round(f.cpl / PYG * 100) / 100 : f.cpl),
