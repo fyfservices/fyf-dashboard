@@ -18,89 +18,104 @@ function recortarSemana(texto) {
   return { fecha: `${f[2]}-${f[1]}-${f[0]}`, bloque };
 }
 
-const INSTRUCCIONES = `Sos un extractor de datos. Recibis el reporte semanal de campanas de una agencia y devolves SOLO un array JSON, sin texto alrededor y sin bloques de codigo.
+function partirPorCliente(semana) {
+  const lineas = semana.split('\n');
+  const re = /^\s*(.{2,40}?)\s+(\d{1,2}\/\d{1,2})\s*$/;
+  const cortes = [];
+  lineas.forEach((l, i) => {
+    const m = l.match(re);
+    if (m) cortes.push({ i, cliente: m[1].trim() });
+  });
+  if (cortes.length === 0) return [{ cliente: 'TODO', texto: semana }];
 
-Un objeto por campana mencionada, con estos campos exactos:
+  const bloques = [];
+  const encabezado = lineas.slice(0, cortes[0].i).join('\n').trim();
+  if (encabezado) bloques.push({ cliente: 'LISTAS', texto: encabezado });
+  cortes.forEach((c, k) => {
+    const fin = k + 1 < cortes.length ? cortes[k + 1].i : lineas.length;
+    const t = lineas.slice(c.i, fin).join('\n').trim();
+    if (t) bloques.push({ cliente: c.cliente, texto: t });
+  });
+  return bloques;
+}
+
+const BASE = `Devolves SOLO un array JSON, sin texto alrededor y sin bloques de codigo.
+
+Un objeto por campana, con estos campos exactos:
 cliente, campana, estado, leads, spend, cpl, moneda, ctr, cpc, hook_rate, hold_rate, conv_link_to_lead, evaluacion, recomendacion, accionables, nota_importante
 
 Reglas:
-- "cliente" DEBE ser uno de esta lista exacta: ${CLIENTES.join(' | ')}. Si aparece un nombre nuevo que no esta en la lista, usalo tal cual viene.
+- "cliente" DEBE ser uno de esta lista exacta: ${CLIENTES.join(' | ')}. Si el nombre del reporte es una version corta (ej "Ventora"), usa el de la lista que corresponda. Si es un cliente nuevo que no esta en la lista, usalo tal cual viene.
 - "estado": "activa" o "desactivada".
-- "moneda": "USD" o "PYG". Los montos escritos con Gs. son PYG. Los montos con $ y coma decimal (ej 1,67) son USD. Los montos con $ y punto de miles (ej 47.897) son PYG.
-- Numeros como numeros, sin simbolos ni separadores de miles. Porcentajes como numero (39.25 y no "39,25%").
-- Si un dato no aparece en el texto, poné null. No inventes ni calcules nada que no este escrito.
+- "moneda": "USD" o "PYG". Montos con Gs. son PYG. Montos con $ y coma decimal (ej 1,67) son USD. Montos con $ y punto de miles (ej 47.897) son PYG.
+- Numeros como numeros, sin simbolos ni separadores de miles. Porcentajes como numero (39.25, no "39,25%").
+- Si un dato no aparece, poné null. No inventes ni calcules nada que no este escrito.
 - "evaluacion" y "recomendacion": el texto tal como esta, resumido si es muy largo.
-- "accionables": array de objetos {texto, urgencia}. urgencia es "alta" si es un error de pago, fatiga de creativos (frases tipo "solo funciona uno"), o un CPL disparado; "media" si pide optimizar o testear algo; "baja" si solo dice mantener o dejar correr.
-- "nota_importante": el texto que sigue a "Nota importante:" para ese cliente, o null.
-- Las campanas listadas bajo "Campanas Desactivadas" van con estado "desactivada", metricas en null, y el motivo en nota_importante.`;
+- "accionables": array de objetos {texto, urgencia}. urgencia "alta" si es error de pago, fatiga de creativos (frases tipo "solo funciona uno"), o CPL disparado; "media" si pide optimizar o testear; "baja" si solo dice mantener o dejar correr.
+- "nota_importante": el texto que sigue a "Nota importante:", o null.`;
+
+const INSTRUCCIONES = `Sos un extractor de datos. Recibis la seccion de UN cliente del reporte semanal de campanas de una agencia.
+
+${BASE}`;
+
+const INSTRUCCIONES_LISTAS = `Sos un extractor de datos. Recibis el indice de campanas activas y desactivadas de un reporte semanal.
+
+Extrae UNICAMENTE las campanas que figuran bajo "Campanas Desactivadas". Ignora por completo las que estan bajo "Campanas Activas".
+
+Cada una va con estado "desactivada", todas las metricas en null, y el motivo entre parentesis en nota_importante.
+
+${BASE}`;
+
+async function llamarClaude(sistema, contenido) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-5',
+      max_tokens: 8000,
+      system: sistema,
+      messages: [{ role: 'user', content: contenido }],
+    }),
+  });
+  const data = await r.json();
+  return { ok: r.ok, status: r.status, data };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Falta ANTHROPIC_API_KEY' });
 
+  const texto = typeof req.body === 'string' ? req.body : (req.body?.texto || '');
+  if (!texto.trim()) return res.status(400).json({ error: 'Body vacio' });
+
   try {
-    let texto = typeof req.body === 'string' ? req.body : req.body?.texto;
+    const modo = req.query?.modo || 'partir';
 
-    if (!texto) {
-      const docId = req.body?.docId;
-      if (!docId) return res.status(400).json({ error: 'Falta texto o docId' });
-      if (!process.env.GOOGLE_API_KEY) return res.status(500).json({ error: 'Falta GOOGLE_API_KEY' });
-
-      const url = `https://docs.googleapis.com/v1/documents/${docId}?includeTabsContent=true&key=${process.env.GOOGLE_API_KEY}`;
-      const dr = await fetch(url);
-      const doc = await dr.json();
-      if (!dr.ok) return res.status(dr.status).json({ error: 'No pude leer el doc', detalle: doc });
-
-      const partes = [];
-      const recorrer = (elems) => {
-        for (const el of elems || []) {
-          if (el.paragraph) {
-            for (const pe of el.paragraph.elements || []) {
-              if (pe.textRun?.content) partes.push(pe.textRun.content);
-            }
-          }
-          if (el.table) {
-            for (const fila of el.table.tableRows || []) {
-              for (const celda of fila.tableCells || []) recorrer(celda.content);
-            }
-          }
-        }
-      };
-      recorrer(doc.body?.content);
-      for (const tab of doc.tabs || []) {
-        recorrer(tab.documentTab?.body?.content);
-      }
-      texto = partes.join('');
+    if (modo === 'partir') {
+      const { fecha, bloque } = recortarSemana(texto);
+      const bloques = partirPorCliente(bloque);
+      return res.status(200).json({ fecha, cantidad: bloques.length, bloques });
     }
 
-    const { fecha, bloque } = recortarSemana(texto);
+    const fecha = req.query?.fecha || null;
+    const cliente = req.query?.cliente || '';
+    const sistema = cliente === 'LISTAS' ? INSTRUCCIONES_LISTAS : INSTRUCCIONES;
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        max_tokens: 16000,
-        system: INSTRUCCIONES,
-        messages: [{ role: 'user', content: bloque }],
-      }),
-    });
+    const { ok, status, data } = await llamarClaude(sistema, texto);
+    if (!ok) return res.status(status).json({ error: 'Error de la API', detalle: data });
 
-    const data = await r.json();
-    if (!r.ok) return res.status(r.status).json({ error: 'Error de la API', detalle: data });
-
-    const bloqueTexto = data.content?.find(b => b.type === 'text')?.text || '';
-    const limpio = bloqueTexto.replace(/```json/g, '').replace(/```/g, '').trim();
+    const txt = data.content?.find(b => b.type === 'text')?.text || '';
+    const limpio = txt.replace(/```json/g, '').replace(/```/g, '').trim();
 
     let filas;
     try {
       filas = JSON.parse(limpio);
     } catch (e) {
-      return res.status(500).json({ error: 'La respuesta no es JSON valido', crudo: limpio.slice(0, 1000) });
+      return res.status(500).json({ error: 'La respuesta no es JSON valido', crudo: limpio.slice(0, 800) });
     }
 
     const salida = filas.map(f => ({
