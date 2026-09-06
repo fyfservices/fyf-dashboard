@@ -293,61 +293,68 @@ function TasksView({tasks, fetchAll}) {
 
 // ── REPORTS ────────────────────────────────────────────────
 function SemanalPanel({semanal}) {
+  const [cliente, setCliente] = useState('todos')
+  const [periodo, setPeriodo] = useState('semanal')
+
   if (!semanal || !semanal.length) return null
 
-  const porFecha = {}
-  semanal.filter(f => f.estado === 'activa').forEach(f => {
-    if (!porFecha[f.fecha]) porFecha[f.fecha] = {fecha:f.fecha, leads:0, spend:0, camps:0}
-    porFecha[f.fecha].leads += Number(f.leads||0)
-    porFecha[f.fecha].spend += Number(f.spend_usd||0)
-    porFecha[f.fecha].camps += 1
-  })
-  const sem = Object.values(porFecha).sort((a,b) => a.fecha.localeCompare(b.fecha))
-  if (sem.length < 2) return null
-  sem.forEach(w => { w.cpl = w.leads ? w.spend / w.leads : 0 })
+  const activas = semanal.filter(f => f.estado === 'activa')
+  const clientes = [...new Set(activas.map(f => f.cliente))].sort()
+  const base = cliente === 'todos' ? activas : activas.filter(f => f.cliente === cliente)
+  if (!base.length) return null
 
-  const hoy = sem[sem.length-1], prev = sem[sem.length-2]
+  const clave = f => periodo === 'mensual' ? f.fecha.slice(0,7) : (periodo === 'total' ? 'total' : f.fecha)
+  const grupos = {}
+  base.forEach(f => {
+    const k = clave(f)
+    if (!grupos[k]) grupos[k] = {k, leads:0, spend:0, camps:0}
+    grupos[k].leads += Number(f.leads||0)
+    grupos[k].spend += Number(f.spend_usd||0)
+    grupos[k].camps += 1
+  })
+  const serie = Object.values(grupos).sort((a,b) => a.k.localeCompare(b.k))
+  serie.forEach(g => { g.cpl = g.leads ? g.spend/g.leads : 0 })
+
+  const hoy = serie[serie.length-1]
+  const prev = serie.length > 1 ? serie[serie.length-2] : null
   const delta = (a,b) => b ? ((a-b)/b*100) : 0
-  const fmtF = f => f.slice(8,10)+'/'+f.slice(5,7)
 
-  // grafico
-  const W=680, H=170, PL=44, PR=16, PT=14, PB=26
-  const iw = W-PL-PR, ih = H-PT-PB
-  const maxL = Math.max(...sem.map(w=>w.leads))*1.15
-  const maxS = Math.max(...sem.map(w=>w.spend))*1.15
-  const x = i => PL + (sem.length===1 ? iw/2 : (i/(sem.length-1))*iw)
-  const yL = v => PT + ih - (v/maxL)*ih
-  const yS = v => PT + ih - (v/maxS)*ih
-  const linea = f => sem.map((w,i) => (i?'L':'M')+x(i).toFixed(1)+' '+f(w).toFixed(1)).join(' ')
-  const area = sem.map((w,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+yL(w.leads).toFixed(1)).join(' ')
-           + ' L'+x(sem.length-1).toFixed(1)+' '+(PT+ih)+' L'+x(0).toFixed(1)+' '+(PT+ih)+' Z'
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const fmt = k => {
+    if (k === 'total') return 'Todo'
+    if (k.length === 7) return MESES[parseInt(k.slice(5,7))-1] + ' ' + k.slice(2,4)
+    return k.slice(8,10)+'/'+k.slice(5,7)
+  }
 
-  // ultima semana por cliente
-  const ult = semanal.filter(f => f.fecha === hoy.fecha && f.estado === 'activa' && f.cpl_usd)
-  const porCli = {}
-  ult.forEach(f => {
-    if (!porCli[f.cliente]) porCli[f.cliente] = {cliente:f.cliente, leads:0, spend:0}
-    porCli[f.cliente].leads += Number(f.leads||0)
-    porCli[f.cliente].spend += Number(f.spend_usd||0)
-  })
-  const ranking = Object.values(porCli).filter(c=>c.leads>0)
-    .map(c => ({...c, cpl: c.spend/c.leads}))
-    .sort((a,b) => a.cpl - b.cpl)
+  const ultimaFecha = base.map(f=>f.fecha).sort().slice(-1)[0]
+  const filasUlt = base.filter(f => f.fecha === ultimaFecha)
+
+  const agrupar = (filas, campo) => {
+    const o = {}
+    filas.forEach(f => {
+      const k = f[campo]
+      if (!o[k]) o[k] = {nombre:k, leads:0, spend:0}
+      o[k].leads += Number(f.leads||0)
+      o[k].spend += Number(f.spend_usd||0)
+    })
+    return Object.values(o).filter(x=>x.leads>0).map(x=>({...x, cpl:x.spend/x.leads})).sort((a,b)=>a.cpl-b.cpl)
+  }
+  const ranking = agrupar(filasUlt, cliente === 'todos' ? 'cliente' : 'campana')
   const maxCpl = ranking.length ? Math.max(...ranking.map(c=>c.cpl)) : 1
 
-  // empeoraron
-  const cplPrev = {}
-  semanal.filter(f => f.fecha === prev.fecha && f.estado === 'activa').forEach(f => {
-    if (!cplPrev[f.cliente]) cplPrev[f.cliente] = {leads:0, spend:0}
-    cplPrev[f.cliente].leads += Number(f.leads||0)
-    cplPrev[f.cliente].spend += Number(f.spend_usd||0)
-  })
-  const empeoraron = ranking.map(c => {
-    const p = cplPrev[c.cliente]
-    if (!p || !p.leads) return null
-    const cp = p.spend/p.leads
-    return {cliente:c.cliente, ahora:c.cpl, antes:cp, var: delta(c.cpl, cp)}
-  }).filter(x => x && x.var > 15).sort((a,b) => b.var - a.var)
+  let empeoraron = []
+  if (serie.length > 1 && periodo === 'semanal') {
+    const fechas = [...new Set(base.map(f=>f.fecha))].sort()
+    const fPrev = fechas[fechas.length-2]
+    const prevAgr = {}
+    agrupar(base.filter(f=>f.fecha===fPrev), cliente==='todos'?'cliente':'campana')
+      .forEach(x => { prevAgr[x.nombre] = x.cpl })
+    empeoraron = ranking.map(c => {
+      const cp = prevAgr[c.nombre]
+      if (!cp) return null
+      return {nombre:c.nombre, ahora:c.cpl, var: delta(c.cpl, cp)}
+    }).filter(x => x && x.var > 15).sort((a,b) => b.var - a.var)
+  }
 
   const KPI = ({label, valor, variacion, invertido}) => {
     const sube = variacion >= 0
@@ -356,66 +363,94 @@ function SemanalPanel({semanal}) {
       <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:'14px 16px'}}>
         <div style={{fontSize:11,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>{label}</div>
         <div style={{fontSize:24,fontWeight:600,color:'var(--text)',fontFamily:'var(--mono)',lineHeight:1.1}}>{valor}</div>
-        <div style={{fontSize:12,marginTop:4,color: bueno ? 'var(--green)' : 'var(--red)'}}>
-          {sube?'\u25b2':'\u25bc'} {Math.abs(variacion).toFixed(1)}% vs semana previa
-        </div>
+        {prev ? (
+          <div style={{fontSize:12,marginTop:4,color: bueno ? 'var(--green)' : 'var(--red)'}}>
+            {sube?'\u25b2':'\u25bc'} {Math.abs(variacion).toFixed(1)}% vs anterior
+          </div>
+        ) : <div style={{fontSize:12,marginTop:4,color:'var(--dim)'}}>sin comparacion</div>}
       </div>
     )
   }
 
+  const Sel = ({valor, set, opciones}) => (
+    <select value={valor} onChange={e=>set(e.target.value)}
+      style={{background:'var(--s2)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:6,padding:'6px 10px',fontSize:12,fontFamily:'inherit',cursor:'pointer'}}>
+      {opciones.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  )
+
+  // grafico
+  const W=680, H=170, PL=44, PR=16, PT=14, PB=26
+  const iw = W-PL-PR, ih = H-PT-PB
+  const maxL = Math.max(...serie.map(w=>w.leads))*1.15 || 1
+  const maxS = Math.max(...serie.map(w=>w.spend))*1.15 || 1
+  const x = i => PL + (serie.length===1 ? iw/2 : (i/(serie.length-1))*iw)
+  const yL = v => PT + ih - (v/maxL)*ih
+  const yS = v => PT + ih - (v/maxS)*ih
+  const linea = f => serie.map((w,i) => (i?'L':'M')+x(i).toFixed(1)+' '+f(w).toFixed(1)).join(' ')
+  const area = serie.map((w,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+yL(w.leads).toFixed(1)).join(' ')
+           + ' L'+x(serie.length-1).toFixed(1)+' '+(PT+ih)+' L'+x(0).toFixed(1)+' '+(PT+ih)+' Z'
+
   return (
     <div style={{marginBottom:24}}>
-      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:12}}>
-        <h2 style={{fontSize:13,fontWeight:500,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Rendimiento semanal</h2>
-        <span style={{fontSize:11,color:'var(--dim)',fontFamily:'var(--mono)'}}>{fmtF(hoy.fecha)} &middot; {hoy.camps} campanas activas</span>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,gap:10,flexWrap:'wrap'}}>
+        <h2 style={{fontSize:13,fontWeight:500,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Rendimiento de campanas</h2>
+        <div style={{display:'flex',gap:8}}>
+          <Sel valor={cliente} set={setCliente} opciones={[{v:'todos',l:'Toda la agencia'},...clientes.map(c=>({v:c,l:c}))]}/>
+          <Sel valor={periodo} set={setPeriodo} opciones={[{v:'semanal',l:'Semanal'},{v:'mensual',l:'Mensual'},{v:'total',l:'Total'}]}/>
+        </div>
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:16}}>
-        <KPI label="Leads" valor={hoy.leads} variacion={delta(hoy.leads,prev.leads)}/>
-        <KPI label="Pauta USD" valor={'$'+Math.round(hoy.spend).toLocaleString()} variacion={delta(hoy.spend,prev.spend)}/>
-        <KPI label="CPL promedio" valor={'$'+hoy.cpl.toFixed(2)} variacion={delta(hoy.cpl,prev.cpl)} invertido/>
+        <KPI label="Leads" valor={hoy.leads.toLocaleString()} variacion={prev?delta(hoy.leads,prev.leads):0}/>
+        <KPI label="Pauta USD" valor={'$'+Math.round(hoy.spend).toLocaleString()} variacion={prev?delta(hoy.spend,prev.spend):0}/>
+        <KPI label="CPL promedio" valor={'$'+hoy.cpl.toFixed(2)} variacion={prev?delta(hoy.cpl,prev.cpl):0} invertido/>
       </div>
 
-      <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16,marginBottom:16}}>
-        <div style={{display:'flex',gap:16,marginBottom:10,fontSize:11,color:'var(--muted)'}}>
-          <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--green)',marginRight:5}}/>Leads</span>
-          <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--muted)',marginRight:5}}/>Pauta USD</span>
+      {serie.length > 1 && (
+        <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16,marginBottom:16}}>
+          <div style={{display:'flex',gap:16,marginBottom:10,fontSize:11,color:'var(--muted)'}}>
+            <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--green)',marginRight:5}}/>Leads</span>
+            <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--muted)',marginRight:5}}/>Pauta USD</span>
+          </div>
+          <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto',display:'block'}}>
+            <defs>
+              <linearGradient id="gLeads" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#4CAF50" stopOpacity="0.28"/>
+                <stop offset="100%" stopColor="#4CAF50" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            {[0,0.5,1].map(t => (
+              <line key={t} x1={PL} x2={W-PR} y1={PT+ih*t} y2={PT+ih*t} stroke="#2A302A" strokeWidth="1"/>
+            ))}
+            {[0,0.5,1].map(t => (
+              <text key={'l'+t} x={PL-8} y={PT+ih*t+4} textAnchor="end" fill="#4A574A" fontSize="10" fontFamily="monospace">
+                {Math.round(maxL*(1-t))}
+              </text>
+            ))}
+            <path d={area} fill="url(#gLeads)"/>
+            <path d={linea(w=>yS(w.spend))} fill="none" stroke="#7A8A7A" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>
+            <path d={linea(w=>yL(w.leads))} fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+            {serie.map((w,i) => (
+              <g key={i}>
+                <circle cx={x(i)} cy={yL(w.leads)} r="3.5" fill="#0B0D0B" stroke="#4CAF50" strokeWidth="2"/>
+                <text x={x(i)} y={H-8} textAnchor="middle" fill="#4A574A" fontSize="10" fontFamily="monospace">{fmt(w.k)}</text>
+              </g>
+            ))}
+          </svg>
         </div>
-        <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto',display:'block'}}>
-          <defs>
-            <linearGradient id="gLeads" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4CAF50" stopOpacity="0.28"/>
-              <stop offset="100%" stopColor="#4CAF50" stopOpacity="0"/>
-            </linearGradient>
-          </defs>
-          {[0,0.5,1].map(t => (
-            <line key={t} x1={PL} x2={W-PR} y1={PT+ih*t} y2={PT+ih*t} stroke="#2A302A" strokeWidth="1"/>
-          ))}
-          {[0,0.5,1].map(t => (
-            <text key={'l'+t} x={PL-8} y={PT+ih*t+4} textAnchor="end" fill="#4A574A" fontSize="10" fontFamily="monospace">
-              {Math.round(maxL*(1-t))}
-            </text>
-          ))}
-          <path d={area} fill="url(#gLeads)"/>
-          <path d={linea(w=>yS(w.spend))} fill="none" stroke="#7A8A7A" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>
-          <path d={linea(w=>yL(w.leads))} fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
-          {sem.map((w,i) => (
-            <g key={i}>
-              <circle cx={x(i)} cy={yL(w.leads)} r="3.5" fill="#0B0D0B" stroke="#4CAF50" strokeWidth="2"/>
-              <text x={x(i)} y={H-8} textAnchor="middle" fill="#4A574A" fontSize="10" fontFamily="monospace">{fmtF(w.fecha)}</text>
-            </g>
-          ))}
-        </svg>
-      </div>
+      )}
 
       <div style={{display:'grid',gridTemplateColumns:empeoraron.length?'1.4fr 1fr':'1fr',gap:12}}>
         <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
-          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>CPL por cliente</div>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>
+            CPL por {cliente==='todos'?'cliente':'campana'} &middot; {fmt(ultimaFecha)}
+          </div>
           {ranking.map((c,i) => (
             <div key={i} style={{marginBottom:10}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}>
-                <span style={{color:'var(--text)',fontWeight:500}}>{c.cliente}</span>
-                <span style={{fontFamily:'var(--mono)',color:'var(--muted)'}}>${c.cpl.toFixed(2)} &middot; {c.leads}L</span>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4,gap:10}}>
+                <span style={{color:'var(--text)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</span>
+                <span style={{fontFamily:'var(--mono)',color:'var(--muted)',whiteSpace:'nowrap'}}>${c.cpl.toFixed(2)} &middot; {c.leads}L</span>
               </div>
               <div style={{height:4,background:'var(--border)',borderRadius:2,overflow:'hidden'}}>
                 <div style={{height:'100%',width:(c.cpl/maxCpl*100)+'%',background:i<3?'var(--green)':'var(--border2)',borderRadius:2}}/>
@@ -428,9 +463,9 @@ function SemanalPanel({semanal}) {
           <div style={{background:'var(--s2)',border:'1px solid var(--border)',borderRadius:10,padding:16}}>
             <div style={{fontSize:12,fontWeight:600,color:'var(--red)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>CPL en alza</div>
             {empeoraron.map((e,i) => (
-              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'7px 0',borderBottom:i<empeoraron.length-1?'1px solid var(--border)':'none'}}>
-                <span style={{fontSize:12,color:'var(--text)'}}>{e.cliente}</span>
-                <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--red)'}}>
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,padding:'7px 0',borderBottom:i<empeoraron.length-1?'1px solid var(--border)':'none'}}>
+                <span style={{fontSize:12,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.nombre}</span>
+                <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--red)',whiteSpace:'nowrap'}}>
                   +{e.var.toFixed(0)}% &middot; ${e.ahora.toFixed(2)}
                 </span>
               </div>
