@@ -118,6 +118,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'La respuesta no es JSON valido', crudo: limpio.slice(0, 800) });
     }
 
+    if (!Array.isArray(filas)) {
+      if (filas && typeof filas === 'object') {
+        const arr = Object.values(filas).find(v => Array.isArray(v));
+        filas = arr ? arr : [filas];
+      } else {
+        filas = [];
+      }
+    }
+    filas = filas.filter(f => f && typeof f === 'object' && (f.campana || f.cliente));
+
     const salida = filas.map(f => ({
       ...f,
       accionables_json: JSON.stringify(f.accionables || []),
