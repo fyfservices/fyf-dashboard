@@ -128,6 +128,12 @@ export default async function handler(req, res) {
     }
     filas = filas.filter(f => f && typeof f === 'object' && (f.campana || f.cliente));
 
+    filas.forEach(f => {
+      const L = Number(f.leads), S = Number(f.spend), C = Number(f.cpl)
+      if (f.spend == null && L > 0 && C > 0) f.spend = Math.round(L * C * 100) / 100
+      if (f.cpl == null && L > 0 && S > 0) f.cpl = Math.round(S / L * 100) / 100
+    });
+
     const salida = filas.map(f => ({
       ...f,
       accionables_json: JSON.stringify(f.accionables || []),
