@@ -4,13 +4,7 @@ import { supabase } from '../supabase'
 const ROL_LABEL = { dueno: 'Dueño', broker: 'Broker', agente: 'Agente', otro: 'Otro' }
 const COM_LABEL = { menos_2k: '< $2K', '2k_5k': '$2K–5K', '5k_15k': '$5K–15K', mas_15k: '> $15K' }
 const INV_LABEL = { si: 'Sí', no: 'No', tal_vez: 'Tal vez' }
-const OBST_LABEL = {
-  tiempo: 'Tiempo',
-  dinero: 'Dinero',
-  confianza: 'Confianza',
-  tecnologia: 'Tecnología',
-  otro: 'Otro',
-}
+const OBST_LABEL = { tiempo: 'Tiempo', dinero: 'Dinero', confianza: 'Confianza', tecnologia: 'Tecnología', otro: 'Otro' }
 const ESTADO_LABEL = { pendiente: 'Pendiente', contactado: 'Contactado', agendado: 'Agendado', cerrado: 'Cerrado', descartado: 'Descartado' }
 const ESTADO_CLS = {
   pendiente: 'estado-pendiente',
@@ -35,7 +29,7 @@ function KpiCard({ label, value, sub, alert }) {
   )
 }
 
-function MiniBar({ data, labelFn, colorFn }) {
+function MiniBar({ data, labelFn }) {
   const max = Math.max(...data.map(d => d.count), 1)
   return (
     <div className="mini-bar-list">
@@ -43,10 +37,7 @@ function MiniBar({ data, labelFn, colorFn }) {
         <div key={d.key} className="mini-bar-row">
           <span className="mini-bar-label">{labelFn(d.key)}</span>
           <div className="mini-bar-track">
-            <div
-              className="mini-bar-fill"
-              style={{ width: `${(d.count / max) * 100}%`, background: colorFn ? colorFn(d.key) : 'var(--accent)' }}
-            />
+            <div className="mini-bar-fill" style={{ width: `${(d.count / max) * 100}%`, background: 'var(--accent)' }} />
           </div>
           <span className="mini-bar-count">{d.count}</span>
         </div>
@@ -68,9 +59,7 @@ function Embudo({ leads }) {
     <div className="embudo">
       {etapas.map((e, i) => {
         const pct = Math.round((e.count / max) * 100)
-        const conv = i > 0 && etapas[i - 1].count > 0
-          ? Math.round((e.count / etapas[i - 1].count) * 100)
-          : null
+        const conv = i > 0 && etapas[i - 1].count > 0 ? Math.round((e.count / etapas[i - 1].count) * 100) : null
         return (
           <div key={e.key} className="embudo-step">
             <div className="embudo-bar-wrap">
@@ -88,6 +77,59 @@ function Embudo({ leads }) {
   )
 }
 
+// Botones de acción por estado actual del lead
+function AccionesFila({ lead, onUpdate }) {
+  const [saving, setSaving] = useState(false)
+
+  async function cambiarEstado(nuevoEstado) {
+    setSaving(true)
+    const updates = { estado: nuevoEstado }
+    if (nuevoEstado === 'contactado' && !lead.contactado_at) updates.contactado_at = new Date().toISOString()
+    if (nuevoEstado === 'agendado' && !lead.agendado_at) updates.agendado_at = new Date().toISOString()
+    if (nuevoEstado === 'cerrado') updates.cerrado = true
+    await supabase.from('leads').update(updates).eq('id', lead.id)
+    setSaving(false)
+    onUpdate()
+  }
+
+  if (saving) return <span style={{ fontSize: 11, color: 'var(--muted)' }}>Guardando…</span>
+
+  // Mostrar siguiente acción lógica según estado actual
+  if (lead.estado === 'pendiente' || !lead.estado) {
+    return (
+      <div className="lead-acciones">
+        <button className="btn-accion btn-contactar" onClick={() => cambiarEstado('contactado')}>Contactado</button>
+        <button className="btn-accion btn-descartar" onClick={() => cambiarEstado('descartado')}>Descartar</button>
+      </div>
+    )
+  }
+  if (lead.estado === 'contactado') {
+    return (
+      <div className="lead-acciones">
+        <button className="btn-accion btn-agendar" onClick={() => cambiarEstado('agendado')}>Agendado</button>
+        <button className="btn-accion btn-descartar" onClick={() => cambiarEstado('descartado')}>Descartar</button>
+      </div>
+    )
+  }
+  if (lead.estado === 'agendado') {
+    return (
+      <div className="lead-acciones">
+        <button className="btn-accion btn-cerrar" onClick={() => cambiarEstado('cerrado')}>Cerrado ✓</button>
+        <button className="btn-accion btn-descartar" onClick={() => cambiarEstado('descartado')}>Descartar</button>
+      </div>
+    )
+  }
+  if (lead.estado === 'cerrado') {
+    return <span style={{ fontSize: 11, color: '#4caf50' }}>✓ Cliente</span>
+  }
+  if (lead.estado === 'descartado') {
+    return (
+      <button className="btn-accion btn-contactar" onClick={() => cambiarEstado('pendiente')}>Reabrir</button>
+    )
+  }
+  return null
+}
+
 export default function LeadsView() {
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
@@ -97,10 +139,7 @@ export default function LeadsView() {
   const [urgentes, setUrgentes] = useState([])
 
   const fetchLeads = useCallback(async () => {
-    const { data } = await supabase
-      .from('leads')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
     if (data) {
       setLeads(data)
       setUrgentes(data.filter(l => l.calificado && !l.contactado_at && minutosDesde(l.created_at) >= 10))
@@ -114,23 +153,15 @@ export default function LeadsView() {
     return () => clearInterval(interval)
   }, [fetchLeads])
 
-  // KPIs
   const total = leads.length
   const pendientes = leads.filter(l => l.calificado && !l.contactado_at).length
   const contactados = leads.filter(l => l.contactado_at).length
   const tasaContacto = total > 0 ? Math.round((contactados / total) * 100) : 0
 
-  // Breakdowns
   function breakdown(field, labelMap) {
     const counts = {}
-    leads.forEach(l => {
-      const k = l[field] || 'otro'
-      counts[k] = (counts[k] || 0) + 1
-    })
-    return Object.entries(counts)
-      .map(([key, count]) => ({ key, count }))
-      .sort((a, b) => b.count - a.count)
-      .filter(d => labelMap[d.key] || d.count > 0)
+    leads.forEach(l => { const k = l[field] || 'otro'; counts[k] = (counts[k] || 0) + 1 })
+    return Object.entries(counts).map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count).filter(d => labelMap[d.key] || d.count > 0)
   }
 
   const porRol = breakdown('rol', ROL_LABEL)
@@ -138,7 +169,6 @@ export default function LeadsView() {
   const porInv = breakdown('invierte', INV_LABEL)
   const porObst = breakdown('obstaculo', OBST_LABEL)
 
-  // Tabla filtrada
   const filtered = leads.filter(l => {
     const q = busqueda.toLowerCase()
     const matchQ = !q || l.nombre?.toLowerCase().includes(q) || l.email?.toLowerCase().includes(q) || l.pais?.toLowerCase().includes(q)
@@ -151,7 +181,6 @@ export default function LeadsView() {
 
   return (
     <div className="leads-view">
-      {/* ALERTA */}
       {urgentes.length > 0 && (
         <div className="alerta-urgente">
           <span className="alerta-icon">⚡</span>
@@ -161,15 +190,12 @@ export default function LeadsView() {
           </span>
           <div className="alerta-names">
             {urgentes.map(u => (
-              <span key={u.id} className="alerta-chip">
-                {u.nombre} · {minutosDesde(u.created_at)}min
-              </span>
+              <span key={u.id} className="alerta-chip">{u.nombre} · {minutosDesde(u.created_at)}min</span>
             ))}
           </div>
         </div>
       )}
 
-      {/* KPIs */}
       <div className="kpi-row">
         <KpiCard label="Total leads" value={total} />
         <KpiCard label="Pendientes" value={pendientes} alert={pendientes > 0} sub={pendientes > 0 ? 'Sin contactar' : null} />
@@ -177,23 +203,19 @@ export default function LeadsView() {
         <KpiCard label="Tasa de contacto" value={`${tasaContacto}%`} />
       </div>
 
-      {/* EMBUDO + BREAKDOWNS */}
       <div className="leads-mid">
         <div className="leads-card">
           <div className="leads-card-title">Embudo</div>
           <Embudo leads={leads} />
         </div>
-
         <div className="leads-card">
           <div className="leads-card-title">Por rol</div>
           <MiniBar data={porRol} labelFn={k => ROL_LABEL[k] || k} />
         </div>
-
         <div className="leads-card">
           <div className="leads-card-title">Por comisiones</div>
           <MiniBar data={porCom} labelFn={k => COM_LABEL[k] || k} />
         </div>
-
         <div className="leads-card">
           <div className="leads-card-title">Inversión / Obstáculo</div>
           <MiniBar data={porInv} labelFn={k => INV_LABEL[k] || k} />
@@ -203,7 +225,6 @@ export default function LeadsView() {
         </div>
       </div>
 
-      {/* TABLA */}
       <div className="leads-card" style={{ marginTop: 16 }}>
         <div className="leads-table-header">
           <input
@@ -236,18 +257,20 @@ export default function LeadsView() {
                 <th>Invierte</th>
                 <th>Calificado</th>
                 <th>Estado</th>
+                <th>Acción</th>
                 <th>Recibido</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
               )}
               {filtered.map(l => (
                 <tr key={l.id}>
                   <td>
                     <div className="lead-nombre">{l.nombre}</div>
                     <div className="lead-email">{l.email}</div>
+                    {l.whatsapp && <div className="lead-email">{l.whatsapp}</div>}
                   </td>
                   <td>{l.pais || '—'}</td>
                   <td>{ROL_LABEL[l.rol] || l.rol || '—'}</td>
@@ -262,9 +285,12 @@ export default function LeadsView() {
                     )}
                   </td>
                   <td>
-                    <span className={`estado-badge ${ESTADO_CLS[l.estado] || ''}`}>
-                      {ESTADO_LABEL[l.estado] || l.estado || 'pendiente'}
+                    <span className={`estado-badge ${ESTADO_CLS[l.estado] || 'estado-pendiente'}`}>
+                      {ESTADO_LABEL[l.estado] || 'Pendiente'}
                     </span>
+                  </td>
+                  <td>
+                    <AccionesFila lead={l} onUpdate={fetchLeads} />
                   </td>
                   <td className="lead-time">
                     {l.created_at ? new Date(l.created_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
