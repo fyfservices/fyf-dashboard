@@ -10,8 +10,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    if (!b.nombre || !b.email) return res.status(400).json({ error: 'Faltan nombre o email' });
+    let b = req.body || {};
+    if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = {}; } }
+    if (Buffer.isBuffer(b)) { try { b = JSON.parse(b.toString()); } catch (e) { b = {}; } }
+    if (!b.nombre || !b.email) {
+      return res.status(400).json({ error: 'Faltan nombre o email', recibido: b, tipo: typeof req.body });
+    }
 
     const motivos = [];
     if (b.rol && !OK_ROL.includes(String(b.rol).toLowerCase())) motivos.push('rol');
