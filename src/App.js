@@ -1,3 +1,4 @@
+import LeadsView from './components/LeadsView'
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from './supabase'
 import './App.css'
@@ -168,6 +169,8 @@ export default function App() {
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
+        {tab==='leads' && <LeadsView />}
+        {tab==='leads' && <LeadsView />}
       </main>
       <AIAssistant
         clients={clients}
