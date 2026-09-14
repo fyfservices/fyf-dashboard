@@ -295,8 +295,8 @@ function TasksView({tasks, fetchAll}) {
 }
 
 // ── REPORTS ────────────────────────────────────────────────
-function SemanalPanel({semanal}) {
-  const [cliente, setCliente] = useState('todos')
+function SemanalPanel({semanal, cliente, setCliente}) {
+  // cliente y setCliente vienen como props
   const [periodo, setPeriodo] = useState('semanal')
   const [semanaSel, setSemanaSel] = useState('')
 
@@ -488,6 +488,8 @@ function SemanalPanel({semanal}) {
 }
 
 function AnalyticsView({clients, ventas, pipeline, semanal}) {
+  const [clienteSel, setClienteSel] = useState('todos')
+  const esGeneral = clienteSel === 'todos'
   const CHRISTIAN_URL = 'https://script.google.com/macros/s/AKfycbwR4NxNLlKoMKcoag58OFQ7yEQnMZTEBU11hVHeghBRFzpG2quBcReaVLzmwnRthf3BFQ/exec'
   const GOAL = 10000
   const totalComis = (id) => (ventas||[]).filter(v=>v.client_id===id).reduce((s,v)=>s+Number(v.amount),0)
@@ -515,9 +517,9 @@ function AnalyticsView({clients, ventas, pipeline, semanal}) {
         </a>
       </div>
 
-      <SemanalPanel semanal={semanal}/>
+      <SemanalPanel semanal={semanal} cliente={clienteSel} setCliente={setClienteSel}/>
 
-      {/* KPIs globales */}
+      {esGeneral && <>}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
         {[
           {n:clients.length,l:'Clientes activos',c:''},
@@ -612,6 +614,8 @@ function AnalyticsView({clients, ventas, pipeline, semanal}) {
           </div>
         </div>
       </div>
+      </>
+      }
     </div>
   )
 }
@@ -781,7 +785,7 @@ function ClientsView({clients, ventas, fetchAll}) {
         </div>
       )}
       <div className="list">
-        {clients.map((c,i)=>{
+        [...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).map((c,i)=>{
           const cv=clientVentas(c.id)
           const comis=totalComis(c.id)
           const p=pct(c.id)
