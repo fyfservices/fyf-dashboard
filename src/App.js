@@ -794,7 +794,6 @@ function ClientsView({clients, ventas, semanal, fetchAll}) {
         {[...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).map((c,i)=>{
           const cv=clientVentas(c.id)
           const stats=realStats(c.name)
-          const stats=realStats(c.name)
           const comis=totalComis(c.id)
           const p=pct(c.id)
           const bc=barColor(p)
