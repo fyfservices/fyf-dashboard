@@ -703,8 +703,14 @@ function ReportsView({reports, fetchAll}) {
 
 // ── CLIENTS ────────────────────────────────────────────────
 function ClientsView({clients, ventas, semanal, fetchAll}) {
+  const NOMBRE_CW = {
+    'Ariel Colturi':'Ariel Coulti','Claudia Barrios':'Claudia Doria','Dayana Salazar':'Dayana',
+    'Diego González':'Diego Gonzalez','Juan y Nacho Portela':'Juan y Nacho','Rocío Ortiz':'Rocio Ortiz',
+    'Soledad Villagra':'Soledad'
+  }
   const realStats = (nombre) => {
-    const filas = (semanal||[]).filter(f => f.cliente === nombre)
+    const alias = NOMBRE_CW[nombre] || nombre
+    const filas = (semanal||[]).filter(f => f.cliente === nombre || f.cliente === alias)
     const leads = filas.reduce((s,f) => s + Number(f.leads||0), 0)
     const spend = filas.reduce((s,f) => s + Number(f.spend_usd||0), 0)
     return { leads, spend }
