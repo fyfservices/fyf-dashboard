@@ -165,7 +165,7 @@ export default function App() {
       <main>
         {tab==='tasks' && <TasksView tasks={tasks} fetchAll={fetchAll}/>}
         {tab==='analytics' && <AnalyticsView clients={clients} ventas={ventas} pipeline={pipeline} semanal={semanal}/>}
-        {tab==='clients' && <ClientsView clients={clients} ventas={ventas} fetchAll={fetchAll}/>}
+        {tab==='clients' && <ClientsView clients={clients} ventas={ventas} semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='pipeline' && <PipelineView pipeline={pipeline} clients={clients} fetchAll={fetchAll}/>}
         {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
@@ -702,7 +702,13 @@ function ReportsView({reports, fetchAll}) {
 }
 
 // ── CLIENTS ────────────────────────────────────────────────
-function ClientsView({clients, ventas, fetchAll}) {
+function ClientsView({clients, ventas, semanal, fetchAll}) {
+  const realStats = (nombre) => {
+    const filas = (semanal||[]).filter(f => f.cliente === nombre)
+    const leads = filas.reduce((s,f) => s + Number(f.leads||0), 0)
+    const spend = filas.reduce((s,f) => s + Number(f.spend_usd||0), 0)
+    return { leads, spend }
+  }
   const [expanded, setExpanded] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
@@ -713,8 +719,8 @@ function ClientsView({clients, ventas, fetchAll}) {
   const clientVentas = (id) => ventas.filter(v=>v.client_id===id)
   const totalComis = (id) => totalComisiones(clientVentas(id))
   const pct = (id) => Math.min(100,Math.round(totalComis(id)/GOAL*100))
-  const totalLeads = clients.reduce((s,c)=>s+(c.leads||0),0)
-  const totalSpend = clients.reduce((s,c)=>s+Number(c.spend||0),0)
+  const totalLeads = clients.reduce((s,c)=>s+realStats(c.name).leads,0)
+  const totalSpend = clients.reduce((s,c)=>s+realStats(c.name).spend,0)
   const totalComisAll = clients.reduce((s,c)=>s+totalComis(c.id),0)
   const renewals = clients.filter(c=>{const d=daysLeft(c.end_date);return d!==null&&d<=21&&d>0&&c.estado!=='completo'})
 
@@ -787,6 +793,8 @@ function ClientsView({clients, ventas, fetchAll}) {
       <div className="list">
         {[...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).map((c,i)=>{
           const cv=clientVentas(c.id)
+          const stats=realStats(c.name)
+          const stats=realStats(c.name)
           const comis=totalComis(c.id)
           const p=pct(c.id)
           const bc=barColor(p)
@@ -814,7 +822,7 @@ function ClientsView({clients, ventas, fetchAll}) {
               {isExpanded&&(
                 <div className="client-body">
                   <div className="client-metrics">
-                    {[{v:c.leads,l:'Leads'},{v:'$'+Math.round(c.spend),l:'Pauta'},{v:c.leads&&c.spend?(c.spend/c.leads).toFixed(1):'-',l:'CPL'},{v:c.leads&&c.spend?(c.spend>0&&comis>0?(comis/c.spend).toFixed(1):'-'):'-',l:'ROAS'},{v:'$'+comis.toLocaleString(),l:'Comisionado',color:'var(--green)'},{v:'$'+Math.max(0,GOAL-comis).toLocaleString(),l:'Faltan',color:comis>=GOAL?'var(--green)':'var(--yellow)'}].map((m,i)=>(
+                    {[{v:stats.leads,l:'Leads'},{v:"$"+Math.round(stats.spend),l:'Pauta'},{v:stats.leads&&stats.spend?(stats.spend/stats.leads).toFixed(1):'-',l:'CPL'},{v:stats.spend&&comis?(comis/stats.spend).toFixed(1)+'x':'-',l:'ROAS'},{v:"$"+comis.toLocaleString(),l:'Comisionado',color:'var(--green)'},{v:"$"+Math.max(0,GOAL-comis).toLocaleString(),l:'Faltan',color:comis>=GOAL?'var(--green)':'var(--yellow)'}].map((m,i)=>(
                       <div key={i} className="cm-cell"><div className="cm-val" style={m.color?{color:m.color}:{}}>{m.v}</div><div className="cm-lbl">{m.l}</div></div>
                     ))}
                   </div>
