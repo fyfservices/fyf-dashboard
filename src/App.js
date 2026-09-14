@@ -814,7 +814,7 @@ function ClientsView({clients, ventas, fetchAll}) {
               {isExpanded&&(
                 <div className="client-body">
                   <div className="client-metrics">
-                    {[{v:c.leads,l:'Leads'},{v:'$'+Math.round(c.spend),l:'Pauta'},{v:c.leads&&c.spend?(c.spend/c.leads).toFixed(1):'-',l:'CPL'},{v:c.leads&&c.spend?(c.leads/c.spend).toFixed(1)+'x':'-',l:'ROAS'},{v:'$'+comis.toLocaleString(),l:'Comisionado',color:'var(--green)'},{v:'$'+Math.max(0,GOAL-comis).toLocaleString(),l:'Faltan',color:comis>=GOAL?'var(--green)':'var(--yellow)'}].map((m,i)=>(
+                    {[{v:c.leads,l:'Leads'},{v:'$'+Math.round(c.spend),l:'Pauta'},{v:c.leads&&c.spend?(c.spend/c.leads).toFixed(1):'-',l:'CPL'},{v:c.leads&&c.spend?(c.spend>0&&comis>0?(comis/c.spend).toFixed(1):'-'):'-',l:'ROAS'},{v:'$'+comis.toLocaleString(),l:'Comisionado',color:'var(--green)'},{v:'$'+Math.max(0,GOAL-comis).toLocaleString(),l:'Faltan',color:comis>=GOAL?'var(--green)':'var(--yellow)'}].map((m,i)=>(
                       <div key={i} className="cm-cell"><div className="cm-val" style={m.color?{color:m.color}:{}}>{m.v}</div><div className="cm-lbl">{m.l}</div></div>
                     ))}
                   </div>
