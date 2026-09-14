@@ -785,7 +785,7 @@ function ClientsView({clients, ventas, fetchAll}) {
         </div>
       )}
       <div className="list">
-        [...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).map((c,i)=>{
+        {[...clients].sort((a,b)=>totalComis(b.id)-totalComis(a.id)).map((c,i)=>{
           const cv=clientVentas(c.id)
           const comis=totalComis(c.id)
           const p=pct(c.id)
@@ -847,7 +847,7 @@ function ClientsView({clients, ventas, fetchAll}) {
             </div>
           )
         })}
-      </div>
+      </div>}
       {modalClient&&(
         <div className="modal-overlay" onClick={()=>setModalClient(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
