@@ -36,6 +36,11 @@ export default async function handler(req, res) {
       motivo_descalifica: motivos.length ? motivos.join(', ') : null,
       estado: calificado ? 'pendiente' : 'descalificado',
       origen: b.origen || 'landing',
+      utm_source: b.utm_source || null,
+      utm_medium: b.utm_medium || null,
+      utm_campaign: b.utm_campaign || null,
+      utm_content: b.utm_content || null,
+      utm_term: b.utm_term || null,
     };
 
     const base = process.env.REACT_APP_SUPABASE_URL;

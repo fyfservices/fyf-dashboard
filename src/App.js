@@ -170,7 +170,6 @@ export default function App() {
         {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
         {tab==='leads' && <LeadsView />}
-        {tab==='leads' && <LeadsView />}
       </main>
       <AIAssistant
         clients={clients}

@@ -142,7 +142,7 @@ export default function LeadsView() {
     const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
     if (data) {
       setLeads(data)
-      setUrgentes(data.filter(l => l.calificado && !l.contactado_at && minutosDesde(l.created_at) >= 10))
+      setUrgentes(data.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'cerrado' && minutosDesde(l.created_at) >= 10))
     }
     setLoading(false)
   }, [])
@@ -154,7 +154,7 @@ export default function LeadsView() {
   }, [fetchLeads])
 
   const total = leads.length
-  const pendientes = leads.filter(l => l.calificado && !l.contactado_at).length
+  const pendientes = leads.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'cerrado').length
   const contactados = leads.filter(l => l.contactado_at).length
   const tasaContacto = total > 0 ? Math.round((contactados / total) * 100) : 0
 
@@ -258,12 +258,13 @@ export default function LeadsView() {
                 <th>Calificado</th>
                 <th>Estado</th>
                 <th>Acción</th>
+                <th>Campaña</th>
                 <th>Recibido</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
               )}
               {filtered.map(l => (
                 <tr key={l.id}>
@@ -291,6 +292,17 @@ export default function LeadsView() {
                   </td>
                   <td>
                     <AccionesFila lead={l} onUpdate={fetchLeads} />
+                  </td>
+                  <td>
+                    {l.utm_campaign || l.utm_content ? (
+                      <div>
+                        {l.utm_campaign && <div className="lead-nombre">{l.utm_campaign}</div>}
+                        {l.utm_content && <div className="lead-email">{l.utm_content}</div>}
+                        {l.utm_source && <div className="lead-email">{l.utm_source}</div>}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{l.origen || '—'}</span>
+                    )}
                   </td>
                   <td className="lead-time">
                     {l.created_at ? new Date(l.created_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
