@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-const CAT_LABEL = { staff: 'Staff', softwares: 'Softwares', others: 'Others' }
-const CAT_COLOR = { staff: '#5B9BD5', softwares: '#F5C842', others: '#9B7FE8' }
+const CAT_LABEL = { staff: 'Staff', softwares: 'Softwares', others: 'Others', inversiones: 'Inversiones' }
+const CAT_COLOR = { staff: '#5B9BD5', softwares: '#F5C842', others: '#9B7FE8', inversiones: '#26C6DA' }
 const MEDIOS = ['Stripe', 'Transferencia', 'Crypto', 'Pesos', 'Efectivo', 'Otro']
 
 function money(n) {
@@ -45,7 +45,7 @@ export default function AccountingView() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   const mesStr = `${anio}-${String(mes + 1).padStart(2, '0')}`
-  const ingMes = ingresos.filter(i => ym(i.fecha) === mesStr)
+  const ingMes = ingresos.filter(i => ym(i.fecha) === mesStr).sort((a,b) => (b.cobrado?1:0) - (a.cobrado?1:0))
   const gasMes = gastos.filter(g => ym(g.fecha) === mesStr)
 
   // Totales — separando cobrado (real) de previsto
@@ -53,6 +53,7 @@ export default function AccountingView() {
   const revenuePrev = ingMes.filter(i => !i.cobrado).reduce((s, i) => s + netoIngreso(i), 0)
   const expensesReal = gasMes.filter(g => g.cobrado).reduce((s, g) => s + Number(g.monto || 0), 0)
   const expensesPrev = gasMes.filter(g => !g.cobrado).reduce((s, g) => s + Number(g.monto || 0), 0)
+  const inversionesReal = gasMes.filter(g => g.categoria === 'inversiones' && g.cobrado).reduce((s, g) => s + Number(g.monto || 0), 0)
   const netCashFlow = revenueReal - expensesReal
   const margen = revenueReal > 0 ? Math.round((netCashFlow / revenueReal) * 100) : 0
 
@@ -68,8 +69,9 @@ export default function AccountingView() {
   const gastosPorCat = ['staff', 'softwares', 'others'].map(cat => ({
     cat,
     total: gasMes.filter(g => g.categoria === cat).reduce((s, g) => s + Number(g.monto || 0), 0),
-    items: gasMes.filter(g => g.categoria === cat),
+    items: gasMes.filter(g => g.categoria === cat).sort((a,b) => (b.cobrado?1:0) - (a.cobrado?1:0)),
   }))
+  const inversionesMes = gasMes.filter(g => g.categoria === 'inversiones').sort((a,b) => (b.cobrado?1:0) - (a.cobrado?1:0))
 
   // Serie gráfico últimos 6 meses (solo cobrado)
   const serie = []
@@ -164,7 +166,7 @@ export default function AccountingView() {
       <div className="acc-kpis">
         <div className="acc-kpi"><div className="acc-kpi-lbl">Opening Balance</div><div className="acc-kpi-val">{money(openingBalance)}</div></div>
         <div className="acc-kpi"><div className="acc-kpi-lbl">Revenue</div><div className="acc-kpi-val" style={{ color: 'var(--green)' }}>{money(revenueReal)}</div>{revenuePrev > 0 && <div className="acc-kpi-sub">+{money(revenuePrev)} previsto</div>}</div>
-        <div className="acc-kpi"><div className="acc-kpi-lbl">Expenses</div><div className="acc-kpi-val" style={{ color: '#ef5350' }}>{money(expensesReal)}</div>{expensesPrev > 0 && <div className="acc-kpi-sub">+{money(expensesPrev)} previsto</div>}</div>
+        <div className="acc-kpi"><div className="acc-kpi-lbl">Expenses</div><div className="acc-kpi-val" style={{ color: '#ef5350' }}>{money(expensesReal)}</div>{inversionesReal > 0 && <div className="acc-kpi-sub" style={{ color: '#26C6DA' }}>{money(inversionesReal)} en inversiones</div>}{expensesPrev > 0 && <div className="acc-kpi-sub">+{money(expensesPrev)} previsto</div>}</div>
         <div className="acc-kpi"><div className="acc-kpi-lbl">Net Cash Flow</div><div className="acc-kpi-val" style={{ color: netCashFlow >= 0 ? 'var(--green)' : '#ef5350' }}>{money(netCashFlow)}</div><div className="acc-kpi-sub">{margen}% margen</div></div>
         <div className="acc-kpi acc-kpi-hl"><div className="acc-kpi-lbl">Closing Balance</div><div className="acc-kpi-val">{money(closingBalance)}</div></div>
       </div>
@@ -293,6 +295,31 @@ export default function AccountingView() {
                 ))}
               </div>
             ))}
+          </div>
+
+          {/* INVERSIONES — sección aparte */}
+          <div className="acc-inv-section">
+            <div className="acc-card-head" style={{ marginTop: 8 }}>
+              <div className="acc-card-title" style={{ color: '#26C6DA' }}>◆ Inversiones · {money(inversionesMes.reduce((s,g)=>s+Number(g.monto||0),0))}</div>
+              <button className="acc-add" style={{ background: 'rgba(38,198,218,.12)', color: '#26C6DA' }} onClick={() => { setEditGasId(null); setFormGas({ ...emptyGas, categoria: 'inversiones', fecha: `${mesStr}-01` }); setShowGas(true) }}>+ Inversión</button>
+            </div>
+            <div className="acc-list">
+              {inversionesMes.length === 0 && <div className="acc-empty">Sin inversiones este mes</div>}
+              {inversionesMes.map(g => (
+                <div key={g.id} className={`acc-item ${!g.cobrado ? 'acc-previsto' : ''}`}>
+                  <button className={`acc-dot-toggle ${g.cobrado ? 'on' : ''}`} onClick={() => toggleCobradoGas(g)} title={g.cobrado ? 'Pagado' : 'Previsto'} />
+                  <div className="acc-item-main">
+                    <div className="acc-item-concepto">{g.concepto}{!g.cobrado && <span className="acc-tag-prev">previsto</span>}</div>
+                    <div className="acc-item-sub">{g.fecha?.slice(8, 10)}/{g.fecha?.slice(5, 7)}</div>
+                  </div>
+                  <div className="acc-item-monto"><div style={{ color: g.cobrado ? '#26C6DA' : 'var(--muted)' }}>{money(g.monto)}</div></div>
+                  <div className="acc-item-btns">
+                    <button className="acc-edit" onClick={() => editarGasto(g)}>✎</button>
+                    <button className="acc-del" onClick={() => delGasto(g.id)}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
