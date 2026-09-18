@@ -1,3 +1,4 @@
+import AccountingView from './components/AccountingView'
 import LeadsView from './components/LeadsView'
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from './supabase'
@@ -156,7 +157,7 @@ export default function App() {
         <span className="header-date">{date}</span>
       </header>
       <nav className="tabs-bar">
-        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'analytics',icon:'▤',label:'Analytics'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'},{id:'accionables',icon:'⚠',label:'Accionables'},{id:'leads',icon:'◉',label:'Leads'}].map(t => (
+        {[{id:'tasks',icon:'✓',label:'Tareas'},{id:'analytics',icon:'▤',label:'Analytics'},{id:'clients',icon:'◎',label:'Clientes'},{id:'pipeline',icon:'⟶',label:'Pipeline'},{id:'content',icon:'▶',label:'Contenido'},{id:'accionables',icon:'⚠',label:'Accionables'},{id:'leads',icon:'◉',label:'Leads'},{id:'contabilidad',icon:'$',label:'Contabilidad'}].map(t => (
           <button key={t.id} className={`tab-btn ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
             <span>{t.icon}</span>{t.label}
           </button>
@@ -170,6 +171,7 @@ export default function App() {
         {tab==='accionables' && <AccionablesView semanal={semanal} fetchAll={fetchAll}/>}
         {tab==='content' && <ContentView content={content} fetchAll={fetchAll}/>}
         {tab==='leads' && <LeadsView />}
+        {tab==='contabilidad' && <AccountingView />}
       </main>
       <AIAssistant
         clients={clients}
