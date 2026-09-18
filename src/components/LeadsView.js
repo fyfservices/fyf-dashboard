@@ -249,7 +249,9 @@ function AsignarBtn({ lead, onUpdate }) {
 
 export default function LeadsView() {
   const [leads, setLeads] = useState([])
-  const [semanal, setSemanal] = useState([])
+  const [gastoCaptacion, setGastoCaptacion] = useState(0)
+  const [editandoGasto, setEditandoGasto] = useState(false)
+  const [gastoInput, setGastoInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('all')
@@ -258,15 +260,15 @@ export default function LeadsView() {
   const [cerrarLead, setCerrarLead] = useState(null)
 
   const fetchLeads = useCallback(async () => {
-    const [{ data: ld }, { data: cw }] = await Promise.all([
+    const [{ data: ld }, { data: cfg }] = await Promise.all([
       supabase.from('leads').select('*').order('created_at', { ascending: false }),
-      supabase.from('campaign_weekly').select('spend_usd,cliente,campana'),
+      supabase.from('config').select('*').eq('key', 'gasto_captacion').single(),
     ])
     if (ld) {
       setLeads(ld)
       setUrgentes(ld.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'cerrado' && l.estado !== 'perdido' && minutosDesde(l.created_at) >= 10))
     }
-    if (cw) setSemanal(cw)
+    if (cfg) setGastoCaptacion(Number(cfg.value || 0))
     setLoading(false)
   }, [])
 
@@ -289,8 +291,8 @@ export default function LeadsView() {
   const nCerrados = cerrados.length
   const pendientes = base.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'perdido').length
 
-  // Gasto total de campañas de captación (global)
-  const gastoTotal = semanal.reduce((s, f) => s + Number(f.spend_usd || 0), 0)
+  // Gasto de la campaña de captación (manual desde config)
+  const gastoTotal = gastoCaptacion
 
   // Métricas de dinero
   const ticketTotalSum = cerrados.reduce((s, l) => s + Number(l.ticket_total || 0), 0)
@@ -321,6 +323,13 @@ export default function LeadsView() {
     const matchEstado = filtroEstado === 'all' || l.estado === filtroEstado
     return matchQ && matchEstado
   })
+
+  async function guardarGasto() {
+    const v = Number(gastoInput || 0)
+    await supabase.from('config').update({ value: v, updated_at: new Date().toISOString() }).eq('key', 'gasto_captacion')
+    setGastoCaptacion(v)
+    setEditandoGasto(false)
+  }
 
   if (loading) return <div className="loading-state">Cargando leads…</div>
 
@@ -356,7 +365,23 @@ export default function LeadsView() {
 
       {/* KPIs dinero */}
       <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-        <KpiCard label="Gasto en ads" value={money(gastoTotal)} />
+        <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => { setGastoInput(String(gastoCaptacion)); setEditandoGasto(true) }}>
+          {editandoGasto ? (
+            <div onClick={e => e.stopPropagation()}>
+              <input type="number" value={gastoInput} onChange={e => setGastoInput(e.target.value)} autoFocus
+                style={{ width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--bg)', color: 'var(--text)', fontSize: 18, fontWeight: 700, outline: 'none' }} />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <button onClick={guardarGasto} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, border: 'none', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Guardar</button>
+                <button onClick={() => setEditandoGasto(false)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}>Cancelar</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="kpi-value">{money(gastoTotal)}</div>
+              <div className="kpi-label">Gasto en ads ✎</div>
+            </>
+          )}
+        </div>
         <KpiCard label="CPL" value={cpl ? money(cpl) : '—'} />
         <KpiCard label="Costo x agenda" value={costoPorAgenda ? money(costoPorAgenda) : '—'} />
         <KpiCard label="CAC" value={cac ? money(cac) : '—'} sub="por cliente" />
