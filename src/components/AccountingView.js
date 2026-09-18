@@ -23,6 +23,7 @@ export default function AccountingView() {
   const now = new Date()
   const [anio, setAnio] = useState(now.getFullYear())
   const [mes, setMes] = useState(now.getMonth())
+  const [vista, setVista] = useState('mensual')
   const [showIng, setShowIng] = useState(false)
   const [showGas, setShowGas] = useState(false)
   const [editIngId, setEditIngId] = useState(null)
@@ -147,6 +148,23 @@ export default function AccountingView() {
     fetchAll()
   }
 
+  // Datos anuales — totales de cada mes del año seleccionado
+  function totalesMes(y, m) {
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`
+    const ing = ingresos.filter(i => ym(i.fecha) === key)
+    const gas = gastos.filter(g => ym(g.fecha) === key)
+    const rev = ing.filter(i => i.cobrado).reduce((a, i) => a + netoIngreso(i), 0)
+    const revPrev = ing.filter(i => !i.cobrado).reduce((a, i) => a + netoIngreso(i), 0)
+    const exp = gas.filter(g => g.cobrado).reduce((a, g) => a + Number(g.monto || 0), 0)
+    const inv = gas.filter(g => g.categoria === 'inversiones' && g.cobrado).reduce((a, g) => a + Number(g.monto || 0), 0)
+    return { rev, revPrev, exp, inv, ncf: rev - exp }
+  }
+  const anioData = MESES.map((_, m) => ({ mes: m, ...totalesMes(anio, m) }))
+  let acumAnual = 0
+  const anioConBalance = anioData.map(d => { acumAnual += d.ncf; return { ...d, closing: acumAnual } })
+  const totalAnual = anioData.reduce((a, d) => ({ rev: a.rev + d.rev, exp: a.exp + d.exp, inv: a.inv + d.inv, ncf: a.ncf + d.ncf }), { rev: 0, exp: 0, inv: 0, ncf: 0 })
+  const maxAnual = Math.max(...anioData.map(d => Math.max(d.rev, d.exp)), 1)
+
   if (loading) return <div className="loading-state">Cargando contabilidad…</div>
 
   return (
@@ -154,15 +172,30 @@ export default function AccountingView() {
       <div className="acc-header">
         <div>
           <h2 className="acc-title">Contabilidad</h2>
-          <div className="acc-sub">Balance del negocio · {MESES[mes]} {anio}</div>
+          <div className="acc-sub">Balance del negocio · {vista === 'mensual' ? `${MESES[mes]} ${anio}` : `Año ${anio}`}</div>
         </div>
-        <div className="acc-month-nav">
-          <button onClick={() => { if (mes === 0) { setMes(11); setAnio(anio - 1) } else setMes(mes - 1) }}>‹</button>
-          <span>{MESES[mes]} {anio}</span>
-          <button onClick={() => { if (mes === 11) { setMes(0); setAnio(anio + 1) } else setMes(mes + 1) }}>›</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="acc-vista-toggle">
+            <button className={vista === 'mensual' ? 'active' : ''} onClick={() => setVista('mensual')}>Mensual</button>
+            <button className={vista === 'anual' ? 'active' : ''} onClick={() => setVista('anual')}>Anual</button>
+          </div>
+          {vista === 'mensual' ? (
+            <div className="acc-month-nav">
+              <button onClick={() => { if (mes === 0) { setMes(11); setAnio(anio - 1) } else setMes(mes - 1) }}>‹</button>
+              <span>{MESES[mes]} {anio}</span>
+              <button onClick={() => { if (mes === 11) { setMes(0); setAnio(anio + 1) } else setMes(mes + 1) }}>›</button>
+            </div>
+          ) : (
+            <div className="acc-month-nav">
+              <button onClick={() => setAnio(anio - 1)}>‹</button>
+              <span>{anio}</span>
+              <button onClick={() => setAnio(anio + 1)}>›</button>
+            </div>
+          )}
         </div>
       </div>
 
+      {vista === 'mensual' && <>
       <div className="acc-kpis">
         <div className="acc-kpi"><div className="acc-kpi-lbl">Opening Balance</div><div className="acc-kpi-val">{money(openingBalance)}</div></div>
         <div className="acc-kpi"><div className="acc-kpi-lbl">Revenue</div><div className="acc-kpi-val" style={{ color: 'var(--green)' }}>{money(revenueReal)}</div>{revenuePrev > 0 && <div className="acc-kpi-sub">+{money(revenuePrev)} previsto</div>}</div>
@@ -323,6 +356,82 @@ export default function AccountingView() {
           </div>
         </div>
       </div>
+      </>}
+
+      {vista === 'anual' && (
+        <div className="acc-anual">
+          {/* Tarjetas resumen del año */}
+          <div className="acc-kpis" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <div className="acc-kpi"><div className="acc-kpi-lbl">Revenue {anio}</div><div className="acc-kpi-val" style={{ color: 'var(--green)' }}>{money(totalAnual.rev)}</div></div>
+            <div className="acc-kpi"><div className="acc-kpi-lbl">Expenses {anio}</div><div className="acc-kpi-val" style={{ color: '#ef5350' }}>{money(totalAnual.exp)}</div><div className="acc-kpi-sub" style={{ color: '#26C6DA' }}>{money(totalAnual.inv)} en inversiones</div></div>
+            <div className="acc-kpi"><div className="acc-kpi-lbl">Net Cash Flow {anio}</div><div className="acc-kpi-val" style={{ color: totalAnual.ncf >= 0 ? 'var(--green)' : '#ef5350' }}>{money(totalAnual.ncf)}</div></div>
+            <div className="acc-kpi acc-kpi-hl"><div className="acc-kpi-lbl">Closing Balance</div><div className="acc-kpi-val">{money(anioConBalance[11].closing)}</div></div>
+          </div>
+
+          {/* Gráfico macro del año */}
+          <div className="acc-card" style={{ marginBottom: 16 }}>
+            <div className="acc-card-title">Evolución {anio}</div>
+            <div className="acc-chart acc-chart-big">
+              {anioConBalance.map((d, i) => (
+                <div key={i} className="acc-bar-group">
+                  <div className="acc-bars">
+                    <div className="acc-bar" style={{ height: `${(d.rev / maxAnual) * 100}%`, background: 'var(--green)' }} title={`Revenue: ${money(d.rev)}`} />
+                    <div className="acc-bar" style={{ height: `${(d.exp / maxAnual) * 100}%`, background: '#ef5350' }} title={`Expenses: ${money(d.exp)}`} />
+                  </div>
+                  <div className="acc-bar-lbl">{MESES[i].slice(0, 3)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="acc-legend">
+              <span><span className="acc-dot" style={{ background: 'var(--green)' }} />Revenue</span>
+              <span><span className="acc-dot" style={{ background: '#ef5350' }} />Expenses</span>
+            </div>
+          </div>
+
+          {/* Tabla anual tipo Sheet */}
+          <div className="acc-card">
+            <div className="acc-card-title">Resumen mensual {anio}</div>
+            <div className="acc-table-wrap">
+              <table className="acc-table">
+                <thead>
+                  <tr>
+                    <th>Concepto</th>
+                    {MESES.map((m, i) => <th key={i} className="acc-th-mes" onClick={() => { setMes(i); setVista('mensual') }}>{m.slice(0, 3)}</th>)}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="acc-td-lbl">Revenue</td>
+                    {anioData.map((d, i) => <td key={i} style={{ color: 'var(--green)' }}>{d.rev ? money(d.rev) : '—'}</td>)}
+                    <td style={{ color: 'var(--green)', fontWeight: 700 }}>{money(totalAnual.rev)}</td>
+                  </tr>
+                  <tr>
+                    <td className="acc-td-lbl">Expenses</td>
+                    {anioData.map((d, i) => <td key={i} style={{ color: '#ef5350' }}>{d.exp ? money(d.exp) : '—'}</td>)}
+                    <td style={{ color: '#ef5350', fontWeight: 700 }}>{money(totalAnual.exp)}</td>
+                  </tr>
+                  <tr>
+                    <td className="acc-td-lbl" style={{ color: '#26C6DA' }}>Inversiones</td>
+                    {anioData.map((d, i) => <td key={i} style={{ color: '#26C6DA' }}>{d.inv ? money(d.inv) : '—'}</td>)}
+                    <td style={{ color: '#26C6DA', fontWeight: 700 }}>{money(totalAnual.inv)}</td>
+                  </tr>
+                  <tr className="acc-tr-hl">
+                    <td className="acc-td-lbl">Net Cash Flow</td>
+                    {anioData.map((d, i) => <td key={i} style={{ color: d.ncf >= 0 ? 'var(--green)' : '#ef5350' }}>{d.ncf ? money(d.ncf) : '—'}</td>)}
+                    <td style={{ fontWeight: 700, color: totalAnual.ncf >= 0 ? 'var(--green)' : '#ef5350' }}>{money(totalAnual.ncf)}</td>
+                  </tr>
+                  <tr>
+                    <td className="acc-td-lbl">Closing Balance</td>
+                    {anioConBalance.map((d, i) => <td key={i} style={{ fontWeight: 600 }}>{money(d.closing)}</td>)}
+                    <td>—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
