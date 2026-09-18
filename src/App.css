@@ -802,3 +802,36 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
   .acc-kpis { grid-template-columns: repeat(2, 1fr); }
   .acc-cols { grid-template-columns: 1fr; }
 }
+
+/* ── CONTABILIDAD v2 — cobrado/previsto, editar, colores ── */
+
+/* Fix colores de los desplegables (contraste) */
+.acc-form select option { background: var(--card); color: var(--text); }
+.acc-form select { color: var(--text); }
+
+/* Toggle cobrado (el puntito verde a la izquierda) */
+.acc-dot-toggle {
+  width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);
+  background: transparent; cursor: pointer; flex-shrink: 0; padding: 0; transition: all .15s;
+}
+.acc-dot-toggle.on { background: var(--green); border-color: var(--green); }
+.acc-dot-toggle:hover { border-color: var(--green); }
+
+/* Item previsto (no cobrado) — atenuado */
+.acc-item.acc-previsto { opacity: 0.62; }
+.acc-item.acc-previsto .acc-item-concepto { font-style: italic; }
+
+/* Botones editar/borrar juntos */
+.acc-item-btns { display: flex; gap: 4px; align-items: center; }
+.acc-edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; opacity: .5; }
+.acc-edit:hover { opacity: 1; color: var(--accent); }
+
+/* Tag previsto */
+.acc-tag-prev { font-size: 9px; background: rgba(158,158,158,.18); color: #9e9e9e; padding: 1px 5px; border-radius: 4px; margin-left: 6px; font-weight: 700; vertical-align: middle; }
+
+/* Botón recurrentes (alternativo) */
+.acc-add-alt { background: rgba(91,155,213,.12); color: #5B9BD5; }
+.acc-add-alt:hover { border-color: #5B9BD5; }
+
+/* El item ahora tiene el toggle adelante, ajustar gap */
+.acc-item { gap: 8px; }
