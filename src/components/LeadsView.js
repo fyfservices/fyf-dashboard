@@ -266,7 +266,7 @@ export default function LeadsView() {
     ])
     if (ld) {
       setLeads(ld)
-      setUrgentes(ld.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'cerrado' && l.estado !== 'perdido' && minutosDesde(l.created_at) >= 10))
+      setUrgentes(ld.filter(l => l.calificado && (l.estado === 'pendiente' || !l.estado) && minutosDesde(l.created_at) >= 10))
     }
     if (cfg) setGastoCaptacion(Number(cfg.value || 0))
     setLoading(false)
@@ -289,7 +289,7 @@ export default function LeadsView() {
   const presentados = base.filter(l => l.se_presento === true).length
   const cerrados = base.filter(l => l.estado === 'cerrado')
   const nCerrados = cerrados.length
-  const pendientes = base.filter(l => l.calificado && !l.contactado_at && l.estado !== 'descartado' && l.estado !== 'perdido').length
+  const pendientes = base.filter(l => l.calificado && (l.estado === 'pendiente' || !l.estado)).length
 
   // Gasto de la campaña de captación (manual desde config)
   const gastoTotal = gastoCaptacion
