@@ -5,11 +5,11 @@ const ROL_LABEL = { dueno: 'Dueño', broker: 'Broker', agente: 'Agente', otro: '
 const COM_LABEL = { menos_2k: '< $2K', '2k_5k': '$2K–5K', '5k_15k': '$5K–15K', mas_15k: '> $15K' }
 const INV_LABEL = { si: 'Sí', no: 'No', tal_vez: 'Tal vez' }
 const OBST_LABEL = { tiempo: 'Tiempo', dinero: 'Dinero', confianza: 'Confianza', tecnologia: 'Tecnología', otro: 'Otro' }
-const ESTADO_LABEL = { pendiente: 'Pendiente', contactado: 'Contactado', agendado: 'Agendado', presento: 'Se presentó', no_show: 'No se presentó', seguimiento: 'En seguimiento', cerrado: 'Cerrado', perdido: 'Perdido', descartado: 'Descartado' }
+const ESTADO_LABEL = { pendiente: 'Pendiente', contactado: 'Contactado', agendado: 'Agendado', presento: 'Se presentó', no_show: 'No se presentó', seguimiento: 'En seguimiento', cerrado: 'Cerrado', perdido: 'Perdido', descartado: 'Descartado', descalificado: 'Descalificado' }
 const ESTADO_CLS = {
   pendiente: 'estado-pendiente', contactado: 'estado-contactado', agendado: 'estado-agendado',
   presento: 'estado-presento', no_show: 'estado-noshow', seguimiento: 'estado-seguimiento',
-  cerrado: 'estado-cerrado', perdido: 'estado-perdido', descartado: 'estado-descartado',
+  cerrado: 'estado-cerrado', perdido: 'estado-perdido', descartado: 'estado-descartado', descalificado: 'estado-descartado',
 }
 const CONCEPTO_LABEL = { fee: 'Fee de compromiso', primera_cuota: '1ra cuota', pif: 'PIF' }
 const RESPONSABLES = ['Fran', 'Feli']
@@ -431,7 +431,9 @@ export default function LeadsView() {
               <tr>
                 <th>Nombre</th>
                 <th>Asignado</th>
+                <th>País</th>
                 <th>Rol</th>
+                <th>Respuestas</th>
                 <th>Estado</th>
                 <th>Acción</th>
                 <th>Cierre</th>
@@ -441,7 +443,7 @@ export default function LeadsView() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
               )}
               {filtered.map(l => (
                 <tr key={l.id}>
@@ -451,7 +453,15 @@ export default function LeadsView() {
                     {l.whatsapp && <div className="lead-email">{l.whatsapp}</div>}
                   </td>
                   <td><AsignarBtn lead={l} onUpdate={fetchLeads} /></td>
+                  <td style={{ fontSize: 12 }}>{l.pais || '—'}</td>
                   <td>{ROL_LABEL[l.rol] || l.rol || '—'}</td>
+                  <td style={{ fontSize: 12 }}>
+                    <div className="lead-resp">
+                      <span title="Comisiones">{COM_LABEL[l.comisiones_mes] || l.comisiones_mes || '—'}</span>
+                      <span title="Invierte" style={{ color: l.invierte === 'si' ? 'var(--green)' : l.invierte === 'no' ? '#ef5350' : 'var(--muted)' }}>{INV_LABEL[l.invierte] || l.invierte || '—'}</span>
+                      {l.obstaculo && <span title="Obstáculo" style={{ color: 'var(--muted)' }}>{OBST_LABEL[l.obstaculo] || l.obstaculo}</span>}
+                    </div>
+                  </td>
                   <td>
                     <span className={`estado-badge ${ESTADO_CLS[l.estado] || 'estado-pendiente'}`}>{ESTADO_LABEL[l.estado] || 'Pendiente'}</span>
                     {!l.calificado && <div className="lead-motivo">{l.motivo_descalifica}</div>}
