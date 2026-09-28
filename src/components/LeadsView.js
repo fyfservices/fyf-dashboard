@@ -216,10 +216,46 @@ function AccionesFila({ lead, onUpdate, onCerrar }) {
     </div>
   )
   if (e === 'cerrado') return <span style={{ fontSize: 11, color: '#4caf50' }}>✓ Cliente</span>
+  if (e === 'descalificado') return (
+    <div className="lead-acciones">
+      <button className="btn-accion btn-contactar" onClick={() => set({ estado: 'contactado', contactado_at: new Date().toISOString() })}>Contactar igual</button>
+      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'descartado' })}>Descartar</button>
+    </div>
+  )
   if (e === 'perdido' || e === 'descartado') return (
     <button className="btn-accion btn-contactar" onClick={() => set({ estado: 'pendiente' })}>Reabrir</button>
   )
   return null
+}
+
+// Notas por lead
+function NotaBtn({ lead, onUpdate }) {
+  const [open, setOpen] = useState(false)
+  const [texto, setTexto] = useState(lead.notas || '')
+  const [saving, setSaving] = useState(false)
+  async function guardar() {
+    setSaving(true)
+    await supabase.from('leads').update({ notas: texto }).eq('id', lead.id)
+    setSaving(false)
+    setOpen(false)
+    onUpdate()
+  }
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button className="btn-nota" onClick={() => { setTexto(lead.notas || ''); setOpen(!open) }} title={lead.notas || 'Agregar nota'}>
+        {lead.notas ? '📝' : '✎'}
+      </button>
+      {open && (
+        <div className="nota-pop" onClick={e => e.stopPropagation()}>
+          <textarea value={texto} onChange={e => setTexto(e.target.value)} placeholder="Escribí una nota…" autoFocus />
+          <div className="nota-pop-actions">
+            <button className="btn-cancel" onClick={() => setOpen(false)}>Cancelar</button>
+            <button className="btn-save" onClick={guardar} disabled={saving}>{saving ? '…' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Selector de responsable
@@ -317,12 +353,13 @@ export default function LeadsView() {
   const porCom = breakdown('comisiones_mes', COM_LABEL)
 
   // Tabla filtrada
+  const alFondo = e => e === 'descartado' || e === 'perdido'
   const filtered = base.filter(l => {
     const q = busqueda.toLowerCase()
     const matchQ = !q || l.nombre?.toLowerCase().includes(q) || l.email?.toLowerCase().includes(q) || l.pais?.toLowerCase().includes(q)
     const matchEstado = filtroEstado === 'all' || l.estado === filtroEstado
     return matchQ && matchEstado
-  })
+  }).sort((a, b) => (alFondo(a.estado) ? 1 : 0) - (alFondo(b.estado) ? 1 : 0))
 
   async function guardarGasto() {
     const v = Number(gastoInput || 0)
@@ -446,10 +483,11 @@ export default function LeadsView() {
                 <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
               )}
               {filtered.map(l => (
-                <tr key={l.id}>
+                <tr key={l.id} className={l.estado === 'descartado' || l.estado === 'perdido' ? 'lead-tachado' : ''}>
                   <td>
-                    <div className="lead-nombre">{l.nombre}</div>
+                    <div className="lead-nombre">{l.nombre} <NotaBtn lead={l} onUpdate={fetchLeads} /></div>
                     <div className="lead-email">{l.email}</div>
+                    {l.notas && <div className="lead-nota-preview">{l.notas}</div>}
                     {l.whatsapp && <div className="lead-email">{l.whatsapp}</div>}
                   </td>
                   <td><AsignarBtn lead={l} onUpdate={fetchLeads} /></td>
