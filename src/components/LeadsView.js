@@ -116,7 +116,7 @@ function ModalCierre({ lead, onClose, onSaved }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
-        <h3>Cerrar venta — {lead.nombre}</h3>
+        <h3>{lead.estado === 'cerrado' ? 'Editar cierre' : 'Cerrar venta'} — {lead.nombre}</h3>
         <div className="form-field" style={{ marginBottom: 10 }}>
           <label>Ticket total (USD)</label>
           <input type="number" value={ticket} onChange={e => setTicket(e.target.value)} placeholder="3000" />
@@ -159,7 +159,7 @@ function ModalCierre({ lead, onClose, onSaved }) {
         </div>
         <div className="form-actions">
           <button className="btn-cancel" onClick={onClose}>Cancelar</button>
-          <button className="btn-save" onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : 'Registrar cierre'}</button>
+          <button className="btn-save" onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : (lead.estado === 'cerrado' ? 'Guardar cambios' : 'Registrar cierre')}</button>
         </div>
       </div>
     </div>
@@ -215,7 +215,13 @@ function AccionesFila({ lead, onUpdate, onCerrar }) {
       <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido' })}>Perdido</button>
     </div>
   )
-  if (e === 'cerrado') return <span style={{ fontSize: 11, color: '#4caf50' }}>✓ Cliente</span>
+  if (e === 'cerrado') return (
+    <div className="lead-acciones">
+      <span style={{ fontSize: 11, color: '#4caf50', marginRight: 4 }}>✓ Cliente</span>
+      <button className="btn-accion btn-agendar" onClick={onCerrar}>Editar cierre</button>
+      <button className="btn-accion btn-descartar" onClick={() => { if (window.confirm('¿Deshacer el cierre? El lead vuelve a "Se presentó" y se borran los datos de venta.')) set({ estado: 'presento', cerrado: false, cerrado_at: null, ticket_total: null, modalidad_pago: null, cantidad_cuotas: null, monto_cuota: null, pago_llamada: null, concepto_pago: null, saldo_pendiente: null }) }}>Deshacer</button>
+    </div>
+  )
   if (e === 'descalificado') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-contactar" onClick={() => set({ estado: 'contactado', contactado_at: new Date().toISOString() })}>Contactar igual</button>
