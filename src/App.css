@@ -891,3 +891,18 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
 .lead-tachado { opacity: 0.5; }
 .lead-tachado .lead-nombre { text-decoration: line-through; }
 .lead-tachado .lead-email { text-decoration: line-through; }
+
+/* ── Menú de descarte (troll/perdido) ─────────────── */
+.descarte-menu {
+  position: absolute; top: 100%; right: 0; z-index: 20; margin-top: 4px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  width: 180px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+}
+.descarte-opt { padding: 8px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+.descarte-opt:hover { background: rgba(255,255,255,.06); }
+.descarte-opt strong { font-size: 12px; color: var(--text); font-weight: 600; }
+.descarte-opt span { font-size: 10px; color: var(--muted); }
+.descarte-opt:first-child { border-bottom: 1px solid var(--border); }
+
+/* Tag troll */
+.tag-troll { font-size: 9px; background: rgba(244,67,54,.18); color: #ef5350; padding: 1px 5px; border-radius: 4px; margin-left: 6px; font-weight: 700; vertical-align: middle; }

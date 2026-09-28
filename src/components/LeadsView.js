@@ -169,11 +169,31 @@ function ModalCierre({ lead, onClose, onSaved }) {
 // Botones de acción según estado
 function AccionesFila({ lead, onUpdate, onCerrar }) {
   const [saving, setSaving] = useState(false)
+  const [menuDescarte, setMenuDescarte] = useState(false)
   async function set(updates) {
     setSaving(true)
     await supabase.from('leads').update(updates).eq('id', lead.id)
     setSaving(false)
+    setMenuDescarte(false)
     onUpdate()
+  }
+  // Descartar pidiendo motivo: troll (no cuenta) o perdido (mantiene historia)
+  function BotonDescartar() {
+    return (
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <button className="btn-accion btn-descartar" onClick={() => setMenuDescarte(!menuDescarte)}>Descartar</button>
+        {menuDescarte && (
+          <div className="descarte-menu" onClick={e => e.stopPropagation()}>
+            <div className="descarte-opt" onClick={() => set({ estado: 'descartado', motivo_descarte: 'perdido' })}>
+              <strong>No respondió</strong><span>Cuenta en el embudo</span>
+            </div>
+            <div className="descarte-opt" onClick={() => set({ estado: 'descartado', motivo_descarte: 'troll' })}>
+              <strong>Troll / inválido</strong><span>No cuenta en métricas</span>
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
   if (saving) return <span style={{ fontSize: 11, color: 'var(--muted)' }}>…</span>
 
@@ -181,13 +201,13 @@ function AccionesFila({ lead, onUpdate, onCerrar }) {
   if (e === 'pendiente') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-contactar" onClick={() => set({ estado: 'contactado', contactado_at: new Date().toISOString() })}>Contactado</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'descartado' })}>Descartar</button>
+      <BotonDescartar />
     </div>
   )
   if (e === 'contactado') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-agendar" onClick={() => set({ estado: 'agendado', agendado_at: new Date().toISOString() })}>Agendado</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'descartado' })}>Descartar</button>
+      <BotonDescartar />
     </div>
   )
   if (e === 'agendado') return (
@@ -200,19 +220,19 @@ function AccionesFila({ lead, onUpdate, onCerrar }) {
     <div className="lead-acciones">
       <button className="btn-accion btn-cerrar" onClick={onCerrar}>Cerrar venta</button>
       <button className="btn-accion btn-agendar" onClick={() => set({ estado: 'seguimiento' })}>Seguimiento</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido' })}>Perdido</button>
+      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido', motivo_descarte: 'perdido' })}>Perdido</button>
     </div>
   )
   if (e === 'seguimiento') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-cerrar" onClick={onCerrar}>Cerrar venta</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido' })}>Perdido</button>
+      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido', motivo_descarte: 'perdido' })}>Perdido</button>
     </div>
   )
   if (e === 'no_show') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-agendar" onClick={() => set({ estado: 'agendado' })}>Reagendar</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido' })}>Perdido</button>
+      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'perdido', motivo_descarte: 'perdido' })}>Perdido</button>
     </div>
   )
   if (e === 'cerrado') return (
@@ -225,7 +245,7 @@ function AccionesFila({ lead, onUpdate, onCerrar }) {
   if (e === 'descalificado') return (
     <div className="lead-acciones">
       <button className="btn-accion btn-contactar" onClick={() => set({ estado: 'contactado', contactado_at: new Date().toISOString() })}>Contactar igual</button>
-      <button className="btn-accion btn-descartar" onClick={() => set({ estado: 'descartado' })}>Descartar</button>
+      <BotonDescartar />
     </div>
   )
   if (e === 'perdido' || e === 'descartado') return (
@@ -321,7 +341,9 @@ export default function LeadsView() {
   }, [fetchLeads])
 
   // Filtro por asignado para métricas
-  const base = filtroAsignado === 'all' ? leads : leads.filter(l => l.asignado_a === filtroAsignado)
+  const baseConTrolls = filtroAsignado === 'all' ? leads : leads.filter(l => l.asignado_a === filtroAsignado)
+  // Los trolls no cuentan en NINGUNA métrica (como si no existieran)
+  const base = baseConTrolls.filter(l => l.motivo_descarte !== 'troll')
 
   // Conteos del embudo
   const total = base.length
@@ -360,7 +382,7 @@ export default function LeadsView() {
 
   // Tabla filtrada
   const alFondo = e => e === 'descartado' || e === 'perdido'
-  const filtered = base.filter(l => {
+  const filtered = baseConTrolls.filter(l => {
     const q = busqueda.toLowerCase()
     const matchQ = !q || l.nombre?.toLowerCase().includes(q) || l.email?.toLowerCase().includes(q) || l.pais?.toLowerCase().includes(q)
     const matchEstado = filtroEstado === 'all' || l.estado === filtroEstado
@@ -508,6 +530,7 @@ export default function LeadsView() {
                   </td>
                   <td>
                     <span className={`estado-badge ${ESTADO_CLS[l.estado] || 'estado-pendiente'}`}>{ESTADO_LABEL[l.estado] || 'Pendiente'}</span>
+                    {l.motivo_descarte === 'troll' && <span className="tag-troll">troll</span>}
                     {!l.calificado && <div className="lead-motivo">{l.motivo_descalifica}</div>}
                   </td>
                   <td><AccionesFila lead={l} onUpdate={fetchLeads} onCerrar={() => setCerrarLead(l)} /></td>
