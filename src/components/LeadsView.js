@@ -82,32 +82,79 @@ function Embudo({ leads }) {
 
 // Modal de cierre
 function ModalCierre({ lead, onClose, onSaved }) {
+  const hoy = new Date().toISOString().slice(0, 10)
   const [ticket, setTicket] = useState(lead.ticket_total || '')
   const [modalidad, setModalidad] = useState(lead.modalidad_pago || 'pif')
-  const [cuotas, setCuotas] = useState(lead.cantidad_cuotas || '')
   const [pagoLlamada, setPagoLlamada] = useState(lead.pago_llamada || '')
   const [concepto, setConcepto] = useState(lead.concepto_pago || 'fee')
+  const [fechaPago, setFechaPago] = useState(lead.cerrado_at ? lead.cerrado_at.slice(0, 10) : hoy)
+  const [cuotasList, setCuotasList] = useState([]) // [{monto, fecha}]
   const [saving, setSaving] = useState(false)
 
-  const montoCuota = modalidad === 'cuotas' && cuotas > 0 ? (Number(ticket) / Number(cuotas)) : null
   const saldo = ticket ? Number(ticket) - Number(pagoLlamada || 0) : null
+  const sumaCuotas = cuotasList.reduce((s, c) => s + Number(c.monto || 0), 0)
+
+  // Generar N cuotas mensuales automáticas desde una fecha
+  function generarCuotas(n) {
+    if (!saldo || saldo <= 0 || n <= 0) { setCuotasList([]); return }
+    const montoC = Math.round((saldo / n) * 100) / 100
+    const base = new Date(fechaPago)
+    const arr = []
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + i, base.getDate())
+      arr.push({ monto: montoC, fecha: d.toISOString().slice(0, 10) })
+    }
+    setCuotasList(arr)
+  }
+
+  function updateCuota(idx, campo, val) {
+    setCuotasList(cuotasList.map((c, i) => i === idx ? { ...c, [campo]: val } : c))
+  }
 
   async function guardar() {
     if (!ticket) { alert('Ingresá el ticket total'); return }
+    if (modalidad === 'cuotas' && cuotasList.length === 0) { alert('Generá las cuotas o cambiá a PIF'); return }
     setSaving(true)
     const updates = {
-      estado: 'cerrado',
-      cerrado: true,
-      cerrado_at: new Date().toISOString(),
-      ticket_total: Number(ticket),
-      modalidad_pago: modalidad,
-      cantidad_cuotas: modalidad === 'cuotas' ? Number(cuotas) : null,
-      monto_cuota: montoCuota ? Math.round(montoCuota * 100) / 100 : null,
-      pago_llamada: Number(pagoLlamada || 0),
-      concepto_pago: concepto,
-      saldo_pendiente: saldo,
+      estado: 'cerrado', cerrado: true, cerrado_at: new Date(fechaPago).toISOString(),
+      ticket_total: Number(ticket), modalidad_pago: modalidad,
+      cantidad_cuotas: modalidad === 'cuotas' ? cuotasList.length : null,
+      monto_cuota: modalidad === 'cuotas' && cuotasList.length ? cuotasList[0].monto : null,
+      pago_llamada: Number(pagoLlamada || 0), concepto_pago: concepto, saldo_pendiente: saldo,
     }
     await supabase.from('leads').update(updates).eq('id', lead.id)
+
+    // Sincronizar con Contabilidad: borrar ingresos previos de este lead y recrear
+    await supabase.from('ingresos').delete().eq('lead_id', lead.id)
+    const aCrear = []
+    const conceptoLabel = { fee: 'Fee de compromiso', primera_cuota: '1ra cuota', pif: 'PIF' }[concepto] || 'Pago'
+    // El pago en llamada (fee) como ingreso COBRADO
+    if (Number(pagoLlamada) > 0) {
+      aCrear.push({
+        fecha: fechaPago, concepto: `${conceptoLabel} — ${lead.nombre}`, cliente: lead.nombre,
+        monto_bruto: Number(pagoLlamada), monto_neto: Number(pagoLlamada), medio_pago: 'Otro',
+        comision_pct: 0, cobrado: true, origen: 'crm', lead_id: lead.id,
+      })
+    }
+    // Las cuotas como ingresos PREVISTOS
+    if (modalidad === 'cuotas') {
+      cuotasList.forEach((c, i) => {
+        aCrear.push({
+          fecha: c.fecha, concepto: `Cuota ${i + 1}/${cuotasList.length} — ${lead.nombre}`, cliente: lead.nombre,
+          monto_bruto: Number(c.monto), monto_neto: Number(c.monto), medio_pago: 'Otro',
+          comision_pct: 0, cobrado: false, origen: 'crm', lead_id: lead.id,
+        })
+      })
+    } else if (modalidad === 'pif' && saldo > 0) {
+      // Si es PIF pero quedó saldo (pagó parte en llamada), el resto previsto para la fecha de pago
+      aCrear.push({
+        fecha: fechaPago, concepto: `Saldo PIF — ${lead.nombre}`, cliente: lead.nombre,
+        monto_bruto: saldo, monto_neto: saldo, medio_pago: 'Otro',
+        comision_pct: 0, cobrado: false, origen: 'crm', lead_id: lead.id,
+      })
+    }
+    if (aCrear.length) await supabase.from('ingresos').insert(aCrear)
+
     setSaving(false)
     onSaved()
     onClose()
@@ -115,34 +162,24 @@ function ModalCierre({ lead, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <h3>{lead.estado === 'cerrado' ? 'Editar cierre' : 'Cerrar venta'} — {lead.nombre}</h3>
-        <div className="form-field" style={{ marginBottom: 10 }}>
-          <label>Ticket total (USD)</label>
-          <input type="number" value={ticket} onChange={e => setTicket(e.target.value)} placeholder="3000" />
-        </div>
-        <div className="form-field" style={{ marginBottom: 10 }}>
-          <label>Modalidad de pago</label>
-          <select value={modalidad} onChange={e => setModalidad(e.target.value)}>
-            <option value="pif">PIF (pago completo)</option>
-            <option value="cuotas">En cuotas</option>
-          </select>
-        </div>
-        {modalidad === 'cuotas' && (
-          <div className="form-grid" style={{ marginBottom: 10 }}>
-            <div className="form-field">
-              <label>Cantidad de cuotas</label>
-              <input type="number" value={cuotas} onChange={e => setCuotas(e.target.value)} placeholder="3" />
-            </div>
-            <div className="form-field">
-              <label>Monto por cuota</label>
-              <input value={montoCuota ? money(montoCuota) : '—'} disabled style={{ opacity: 0.7 }} />
-            </div>
-          </div>
-        )}
         <div className="form-grid" style={{ marginBottom: 10 }}>
           <div className="form-field">
-            <label>Pagó en la llamada</label>
+            <label>Ticket total (USD)</label>
+            <input type="number" value={ticket} onChange={e => setTicket(e.target.value)} placeholder="3000" />
+          </div>
+          <div className="form-field">
+            <label>Modalidad</label>
+            <select value={modalidad} onChange={e => { setModalidad(e.target.value); setCuotasList([]) }}>
+              <option value="pif">PIF (pago completo)</option>
+              <option value="cuotas">En cuotas</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-grid" style={{ marginBottom: 10 }}>
+          <div className="form-field">
+            <label>Pagó ahora</label>
             <input type="number" value={pagoLlamada} onChange={e => setPagoLlamada(e.target.value)} placeholder="500" />
           </div>
           <div className="form-field">
@@ -154,9 +191,41 @@ function ModalCierre({ lead, onClose, onSaved }) {
             </select>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-          Saldo pendiente: <strong style={{ color: 'var(--text)' }}>{saldo !== null ? money(saldo) : '—'}</strong>
+        <div className="form-field" style={{ marginBottom: 10 }}>
+          <label>Fecha del pago</label>
+          <input type="date" value={fechaPago} onChange={e => setFechaPago(e.target.value)} />
         </div>
+
+        {modalidad === 'cuotas' && (
+          <div className="cierre-cuotas">
+            <div className="cierre-cuotas-head">
+              <span>Saldo a financiar: <strong>{saldo !== null ? money(saldo) : '—'}</strong></span>
+              <select onChange={e => generarCuotas(Number(e.target.value))} value={cuotasList.length || ''}>
+                <option value="">Generar cuotas…</option>
+                {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} cuotas mensuales</option>)}
+              </select>
+            </div>
+            {cuotasList.map((c, i) => (
+              <div key={i} className="cierre-cuota-row">
+                <span className="cierre-cuota-n">#{i + 1}</span>
+                <input type="number" value={c.monto} onChange={e => updateCuota(i, 'monto', e.target.value)} />
+                <input type="date" value={c.fecha} onChange={e => updateCuota(i, 'fecha', e.target.value)} />
+              </div>
+            ))}
+            {cuotasList.length > 0 && (
+              <div className="cierre-cuotas-check" style={{ color: Math.abs(sumaCuotas - saldo) < 1 ? 'var(--green)' : '#ffa000' }}>
+                Suma cuotas: {money(sumaCuotas)} {Math.abs(sumaCuotas - saldo) >= 1 ? `(saldo: ${money(saldo)})` : '✓'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {modalidad === 'pif' && saldo > 0 && (
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+            Saldo pendiente: <strong style={{ color: 'var(--text)' }}>{money(saldo)}</strong> (queda como previsto para el {fechaPago})
+          </div>
+        )}
+
         <div className="form-actions">
           <button className="btn-cancel" onClick={onClose}>Cancelar</button>
           <button className="btn-save" onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : (lead.estado === 'cerrado' ? 'Guardar cambios' : 'Registrar cierre')}</button>
