@@ -944,3 +944,70 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
 .cob-badge-vencida { background: rgba(244,67,54,.15); color: #ef5350; }
 .cob-badge-pronto { background: rgba(255,160,0,.15); color: #ffa000; }
 .cob-badge-futura { background: rgba(158,158,158,.12); color: #9e9e9e; }
+
+/* ── Cobranzas 2.0 — timeline por meses ─────────────── */
+.cob2 { padding: 4px 0 20px; }
+
+/* Hero */
+.cob2-hero {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  padding: 24px 28px; margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--card) 0%, var(--bg) 100%);
+  border: 1px solid var(--border); border-radius: 16px;
+}
+.cob2-hero-num { font-size: 42px; font-weight: 700; color: var(--text); line-height: 1; letter-spacing: -0.02em; }
+.cob2-hero-lbl { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.cob2-hero-side { display: flex; gap: 28px; }
+.cob2-hero-stat { display: flex; align-items: center; gap: 10px; }
+.cob2-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cob2-dot-venc { background: #ef5350; box-shadow: 0 0 10px rgba(239,83,80,.5); }
+.cob2-dot-pronto { background: #ffa000; box-shadow: 0 0 10px rgba(255,160,0,.5); }
+.cob2-stat-num { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1; }
+.cob2-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* Timeline horizontal */
+.cob2-timeline { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; }
+.cob2-col {
+  flex: 0 0 240px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+}
+.cob2-col-now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.cob2-col-head { padding: 16px 18px 14px; border-bottom: 1px solid var(--border); }
+.cob2-col-mes { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.cob2-now-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: var(--accent); color: #fff; padding: 2px 7px; border-radius: 5px; }
+.cob2-col-total { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 6px; letter-spacing: -0.01em; }
+.cob2-col-venc { font-size: 11px; color: #ef5350; font-weight: 600; margin-top: 4px; }
+
+.cob2-col-items { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Fichas de pago */
+.cob2-ficha {
+  background: var(--bg); border-radius: 10px; padding: 12px 14px;
+  border-left: 3px solid var(--border); position: relative; transition: transform .12s;
+}
+.cob2-ficha:hover { transform: translateX(2px); }
+.cob2-ficha.cob2-vencida { border-left-color: #ef5350; }
+.cob2-ficha.cob2-pronto { border-left-color: #ffa000; }
+.cob2-ficha.cob2-futura { border-left-color: #5B9BD5; }
+
+.cob2-ficha-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.cob2-ficha-dia {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  background: var(--card); border-radius: 5px; padding: 2px 7px;
+}
+.cob2-ficha-monto { font-size: 16px; font-weight: 700; color: var(--text); }
+.cob2-ficha-concepto { font-size: 12px; color: var(--text); line-height: 1.3; }
+.cob2-ficha-cliente { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.cob2-ficha-btn {
+  width: 100%; margin-top: 10px; padding: 6px; border-radius: 7px; border: 1px solid var(--border);
+  background: transparent; color: var(--green); font-size: 11px; font-weight: 600; cursor: pointer; transition: all .12s;
+}
+.cob2-ficha-btn:hover { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* Empty */
+.cob2-empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.cob2-empty-icon {
+  width: 56px; height: 56px; border-radius: 50%; background: rgba(76,175,80,.12); color: var(--green);
+  font-size: 26px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+}

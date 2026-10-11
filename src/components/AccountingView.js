@@ -448,40 +448,88 @@ export default function AccountingView() {
         </div>
       )}
 
-      {vista === 'cobranzas' && (
-        <div className="acc-cobranzas">
-          {/* Tarjetas resumen */}
-          <div className="acc-kpis" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-            <div className="acc-kpi"><div className="acc-kpi-lbl">Total por cobrar</div><div className="acc-kpi-val">{money(totalPorCobrar)}</div><div className="acc-kpi-sub">{cobranzas.length} pago{cobranzas.length !== 1 ? 's' : ''}</div></div>
-            <div className="acc-kpi" style={totalVencido > 0 ? { borderColor: '#ef5350' } : {}}><div className="acc-kpi-lbl">Vencido</div><div className="acc-kpi-val" style={{ color: totalVencido > 0 ? '#ef5350' : 'var(--text)' }}>{money(totalVencido)}</div><div className="acc-kpi-sub">{cobVencidas.length} pago{cobVencidas.length !== 1 ? 's' : ''}</div></div>
-            <div className="acc-kpi" style={cobEstaSemana.length > 0 ? { borderColor: '#ffa000' } : {}}><div className="acc-kpi-lbl">Esta semana</div><div className="acc-kpi-val" style={{ color: cobEstaSemana.length > 0 ? '#ffa000' : 'var(--text)' }}>{money(cobEstaSemana.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0))}</div><div className="acc-kpi-sub">{cobEstaSemana.length} pago{cobEstaSemana.length !== 1 ? 's' : ''}</div></div>
-          </div>
+      {vista === 'cobranzas' && (() => {
+        // Agrupar cobranzas por mes
+        const porMes = {}
+        cobranzas.forEach(i => {
+          const k = ym(i.fecha)
+          if (!porMes[k]) porMes[k] = []
+          porMes[k].push(i)
+        })
+        const mesesOrdenados = Object.keys(porMes).sort()
+        const nombreMes = k => {
+          const [y, m] = k.split('-')
+          return `${MESES[parseInt(m) - 1]} ${y.slice(2)}`
+        }
+        const totalMes = arr => arr.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0)
+        const esMesActual = k => k === new Date().toISOString().slice(0, 7)
 
-          <div className="acc-card">
-            <div className="acc-card-title">Pagos pendientes · ordenados por fecha</div>
-            <div className="acc-list" style={{ marginTop: 12 }}>
-              {cobranzas.length === 0 && <div className="acc-empty">No hay cobranzas pendientes 🎉</div>}
-              {cobranzas.map(i => {
-                const est = estadoCobranza(i.fecha)
-                return (
-                  <div key={i.id} className={`acc-cobranza-item cob-${est}`}>
-                    <button className="acc-dot-toggle" onClick={async () => { await supabase.from('ingresos').update({ cobrado: true }).eq('id', i.id); fetchAll() }} title="Marcar cobrado" />
-                    <div className="acc-item-main">
-                      <div className="acc-item-concepto">{i.concepto}{i.origen === 'crm' && <span className="acc-tag-crm">CRM</span>}</div>
-                      <div className="acc-item-sub">{i.cliente ? i.cliente + ' · ' : ''}{i.medio_pago || ''}{i.comision_pct > 0 ? ` · ${i.comision_pct}%` : ''}</div>
-                    </div>
-                    <div className="acc-cobranza-fecha">
-                      <div className={`cob-badge cob-badge-${est}`}>{est === 'vencida' ? 'Vencido' : est === 'pronto' ? 'Esta semana' : 'Próximo'}</div>
-                      <div className="acc-cobranza-fecha-txt">{i.fecha?.slice(8, 10)}/{i.fecha?.slice(5, 7)}/{i.fecha?.slice(2, 4)}</div>
-                    </div>
-                    <div className="acc-item-monto"><div style={{ color: est === 'vencida' ? '#ef5350' : 'var(--text)' }}>{money(i.monto_neto ?? i.monto_bruto)}</div></div>
+        return (
+          <div className="cob2">
+            {/* Franja resumen */}
+            <div className="cob2-hero">
+              <div className="cob2-hero-main">
+                <div className="cob2-hero-num">{money(totalPorCobrar)}</div>
+                <div className="cob2-hero-lbl">por cobrar · {cobranzas.length} pago{cobranzas.length !== 1 ? 's' : ''}</div>
+              </div>
+              <div className="cob2-hero-side">
+                {totalVencido > 0 && (
+                  <div className="cob2-hero-stat">
+                    <span className="cob2-dot cob2-dot-venc" />
+                    <div><div className="cob2-stat-num">{money(totalVencido)}</div><div className="cob2-stat-lbl">vencido · {cobVencidas.length}</div></div>
                   </div>
-                )
-              })}
+                )}
+                {cobEstaSemana.length > 0 && (
+                  <div className="cob2-hero-stat">
+                    <span className="cob2-dot cob2-dot-pronto" />
+                    <div><div className="cob2-stat-num">{money(cobEstaSemana.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0))}</div><div className="cob2-stat-lbl">esta semana · {cobEstaSemana.length}</div></div>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Timeline por meses */}
+            {cobranzas.length === 0 ? (
+              <div className="cob2-empty">
+                <div className="cob2-empty-icon">✓</div>
+                <div>No hay cobranzas pendientes.<br />Todo al día.</div>
+              </div>
+            ) : (
+              <div className="cob2-timeline">
+                {mesesOrdenados.map(k => {
+                  const items = porMes[k].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+                  const venc = items.filter(i => estadoCobranza(i.fecha) === 'vencida')
+                  return (
+                    <div key={k} className={`cob2-col ${esMesActual(k) ? 'cob2-col-now' : ''}`}>
+                      <div className="cob2-col-head">
+                        <div className="cob2-col-mes">{nombreMes(k)}{esMesActual(k) && <span className="cob2-now-tag">ahora</span>}</div>
+                        <div className="cob2-col-total">{money(totalMes(items))}</div>
+                        {venc.length > 0 && <div className="cob2-col-venc">{venc.length} vencido{venc.length !== 1 ? 's' : ''}</div>}
+                      </div>
+                      <div className="cob2-col-items">
+                        {items.map(i => {
+                          const est = estadoCobranza(i.fecha)
+                          return (
+                            <div key={i.id} className={`cob2-ficha cob2-${est}`}>
+                              <div className="cob2-ficha-top">
+                                <span className="cob2-ficha-dia">{i.fecha?.slice(8, 10)}</span>
+                                <span className="cob2-ficha-monto">{money(i.monto_neto ?? i.monto_bruto)}</span>
+                              </div>
+                              <div className="cob2-ficha-concepto">{i.concepto}</div>
+                              {i.cliente && <div className="cob2-ficha-cliente">{i.cliente}</div>}
+                              <button className="cob2-ficha-btn" onClick={async () => { await supabase.from('ingresos').update({ cobrado: true }).eq('id', i.id); fetchAll() }}>Marcar cobrado</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
