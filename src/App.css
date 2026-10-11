@@ -928,3 +928,19 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
 .cierre-cuota-row input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; outline: none; }
 .cierre-cuota-row input:focus { border-color: var(--accent); }
 .cierre-cuotas-check { font-size: 11px; font-weight: 600; margin-top: 8px; text-align: right; }
+
+/* ── Vista Cobranzas ─────────────────────────────── */
+.acc-cobranza-item {
+  display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px;
+  margin-bottom: 8px; border: 1px solid var(--border); background: var(--bg);
+}
+.acc-cobranza-item.cob-vencida { border-left: 3px solid #ef5350; }
+.acc-cobranza-item.cob-pronto { border-left: 3px solid #ffa000; }
+.acc-cobranza-item.cob-futura { border-left: 3px solid var(--border2, var(--border)); }
+
+.acc-cobranza-fecha { text-align: center; min-width: 90px; }
+.acc-cobranza-fecha-txt { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+.cob-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 2px 8px; border-radius: 5px; display: inline-block; }
+.cob-badge-vencida { background: rgba(244,67,54,.15); color: #ef5350; }
+.cob-badge-pronto { background: rgba(255,160,0,.15); color: #ffa000; }
+.cob-badge-futura { background: rgba(158,158,158,.12); color: #9e9e9e; }

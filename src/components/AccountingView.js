@@ -165,6 +165,20 @@ export default function AccountingView() {
   const totalAnual = anioData.reduce((a, d) => ({ rev: a.rev + d.rev, exp: a.exp + d.exp, inv: a.inv + d.inv, ncf: a.ncf + d.ncf }), { rev: 0, exp: 0, inv: 0, ncf: 0 })
   const maxAnual = Math.max(...anioData.map(d => Math.max(d.rev, d.exp)), 1)
 
+  // Cobranzas: todos los ingresos previstos (no cobrados), ordenados por fecha
+  const hoyStr = new Date().toISOString().slice(0, 10)
+  const en7dias = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+  const cobranzas = ingresos.filter(i => !i.cobrado).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+  const cobVencidas = cobranzas.filter(i => i.fecha < hoyStr)
+  const cobEstaSemana = cobranzas.filter(i => i.fecha >= hoyStr && i.fecha <= en7dias)
+  const totalPorCobrar = cobranzas.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0)
+  const totalVencido = cobVencidas.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0)
+  function estadoCobranza(fecha) {
+    if (fecha < hoyStr) return 'vencida'
+    if (fecha <= en7dias) return 'pronto'
+    return 'futura'
+  }
+
   if (loading) return <div className="loading-state">Cargando contabilidad…</div>
 
   return (
@@ -172,14 +186,15 @@ export default function AccountingView() {
       <div className="acc-header">
         <div>
           <h2 className="acc-title">Contabilidad</h2>
-          <div className="acc-sub">Balance del negocio · {vista === 'mensual' ? `${MESES[mes]} ${anio}` : `Año ${anio}`}</div>
+          <div className="acc-sub">Balance del negocio · {vista === 'mensual' ? `${MESES[mes]} ${anio}` : vista === 'anual' ? `Año ${anio}` : 'Cobranzas pendientes'}</div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div className="acc-vista-toggle">
             <button className={vista === 'mensual' ? 'active' : ''} onClick={() => setVista('mensual')}>Mensual</button>
             <button className={vista === 'anual' ? 'active' : ''} onClick={() => setVista('anual')}>Anual</button>
+            <button className={vista === 'cobranzas' ? 'active' : ''} onClick={() => setVista('cobranzas')}>Cobranzas</button>
           </div>
-          {vista === 'mensual' ? (
+          {vista === 'cobranzas' ? null : vista === 'mensual' ? (
             <div className="acc-month-nav">
               <button onClick={() => { if (mes === 0) { setMes(11); setAnio(anio - 1) } else setMes(mes - 1) }}>‹</button>
               <span>{MESES[mes]} {anio}</span>
@@ -428,6 +443,41 @@ export default function AccountingView() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vista === 'cobranzas' && (
+        <div className="acc-cobranzas">
+          {/* Tarjetas resumen */}
+          <div className="acc-kpis" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div className="acc-kpi"><div className="acc-kpi-lbl">Total por cobrar</div><div className="acc-kpi-val">{money(totalPorCobrar)}</div><div className="acc-kpi-sub">{cobranzas.length} pago{cobranzas.length !== 1 ? 's' : ''}</div></div>
+            <div className="acc-kpi" style={totalVencido > 0 ? { borderColor: '#ef5350' } : {}}><div className="acc-kpi-lbl">Vencido</div><div className="acc-kpi-val" style={{ color: totalVencido > 0 ? '#ef5350' : 'var(--text)' }}>{money(totalVencido)}</div><div className="acc-kpi-sub">{cobVencidas.length} pago{cobVencidas.length !== 1 ? 's' : ''}</div></div>
+            <div className="acc-kpi" style={cobEstaSemana.length > 0 ? { borderColor: '#ffa000' } : {}}><div className="acc-kpi-lbl">Esta semana</div><div className="acc-kpi-val" style={{ color: cobEstaSemana.length > 0 ? '#ffa000' : 'var(--text)' }}>{money(cobEstaSemana.reduce((s, i) => s + Number(i.monto_neto ?? i.monto_bruto ?? 0), 0))}</div><div className="acc-kpi-sub">{cobEstaSemana.length} pago{cobEstaSemana.length !== 1 ? 's' : ''}</div></div>
+          </div>
+
+          <div className="acc-card">
+            <div className="acc-card-title">Pagos pendientes · ordenados por fecha</div>
+            <div className="acc-list" style={{ marginTop: 12 }}>
+              {cobranzas.length === 0 && <div className="acc-empty">No hay cobranzas pendientes 🎉</div>}
+              {cobranzas.map(i => {
+                const est = estadoCobranza(i.fecha)
+                return (
+                  <div key={i.id} className={`acc-cobranza-item cob-${est}`}>
+                    <button className="acc-dot-toggle" onClick={async () => { await supabase.from('ingresos').update({ cobrado: true }).eq('id', i.id); fetchAll() }} title="Marcar cobrado" />
+                    <div className="acc-item-main">
+                      <div className="acc-item-concepto">{i.concepto}{i.origen === 'crm' && <span className="acc-tag-crm">CRM</span>}</div>
+                      <div className="acc-item-sub">{i.cliente ? i.cliente + ' · ' : ''}{i.medio_pago || ''}{i.comision_pct > 0 ? ` · ${i.comision_pct}%` : ''}</div>
+                    </div>
+                    <div className="acc-cobranza-fecha">
+                      <div className={`cob-badge cob-badge-${est}`}>{est === 'vencida' ? 'Vencido' : est === 'pronto' ? 'Esta semana' : 'Próximo'}</div>
+                      <div className="acc-cobranza-fecha-txt">{i.fecha?.slice(8, 10)}/{i.fecha?.slice(5, 7)}/{i.fecha?.slice(2, 4)}</div>
+                    </div>
+                    <div className="acc-item-monto"><div style={{ color: est === 'vencida' ? '#ef5350' : 'var(--text)' }}>{money(i.monto_neto ?? i.monto_bruto)}</div></div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
