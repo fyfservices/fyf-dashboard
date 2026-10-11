@@ -1046,3 +1046,12 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
   background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .acc-modo-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+
+/* ── Toggle único/cuotas en form de ingreso ──────── */
+.acc-modo-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+.acc-modo-toggle button {
+  flex: 1; padding: 7px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.acc-modo-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
