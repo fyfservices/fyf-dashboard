@@ -28,9 +28,11 @@ export default function AccountingView() {
   const [showGas, setShowGas] = useState(false)
   const [editIngId, setEditIngId] = useState(null)
   const [editGasId, setEditGasId] = useState(null)
-  const emptyIng = { fecha: '', concepto: '', cliente: '', monto_bruto: '', medio_pago: 'Stripe', comision_pct: '4.4', nota: '', cobrado: true }
+  const emptyIng = { fecha: '', concepto: '', cliente: '', monto_bruto: '', medio_pago: 'Stripe', comision_pct: '4.4', nota: '', cobrado: true, pago_inicial: '' }
   const emptyGas = { fecha: '', categoria: 'staff', concepto: '', monto: '', recurrente: false, nota: '', cobrado: true }
   const [formIng, setFormIng] = useState(emptyIng)
+  const [ingModo, setIngModo] = useState('unico') // 'unico' | 'cuotas'
+  const [ingCuotas, setIngCuotas] = useState([]) // [{monto, fecha}]
   const [formGas, setFormGas] = useState(emptyGas)
 
   const fetchAll = useCallback(async () => {
@@ -86,19 +88,62 @@ export default function AccountingView() {
   const maxSerie = Math.max(...serie.map(s => Math.max(s.rev, s.gas)), 1)
 
   // Guardar ingreso (nuevo o edición)
+  // Generar N cuotas mensuales desde la fecha del form
+  function generarIngCuotas(n) {
+    const total = Number(formIng.monto_bruto || 0)
+    const pagoInicial = Number(formIng.pago_inicial || 0)
+    const saldo = total - pagoInicial
+    if (saldo <= 0 || n <= 0) { setIngCuotas([]); return }
+    const montoC = Math.round((saldo / n) * 100) / 100
+    const base = new Date(formIng.fecha || `${mesStr}-01`)
+    const arr = []
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + i, base.getDate())
+      arr.push({ monto: montoC, fecha: d.toISOString().slice(0, 10) })
+    }
+    setIngCuotas(arr)
+  }
+  function updateIngCuota(idx, campo, val) {
+    setIngCuotas(ingCuotas.map((c, i) => i === idx ? { ...c, [campo]: val } : c))
+  }
+
   async function saveIngreso() {
     if (!formIng.concepto || !formIng.monto_bruto || !formIng.fecha) { alert('Completá fecha, concepto y monto'); return }
-    const bruto = Number(formIng.monto_bruto)
     const com = Number(formIng.comision_pct || 0)
-    const neto = bruto - (bruto * com / 100)
-    const payload = {
-      fecha: formIng.fecha, concepto: formIng.concepto, cliente: formIng.cliente || null,
-      monto_bruto: bruto, medio_pago: formIng.medio_pago, comision_pct: com,
-      monto_neto: Math.round(neto * 100) / 100, nota: formIng.nota || null, cobrado: formIng.cobrado,
+    const neto = v => Math.round((v - v * com / 100) * 100) / 100
+
+    // MODO ÚNICO (o edición): un solo ingreso, como siempre
+    if (ingModo === 'unico' || editIngId) {
+      const bruto = Number(formIng.monto_bruto)
+      const payload = {
+        fecha: formIng.fecha, concepto: formIng.concepto, cliente: formIng.cliente || null,
+        monto_bruto: bruto, medio_pago: formIng.medio_pago, comision_pct: com,
+        monto_neto: neto(bruto), nota: formIng.nota || null, cobrado: formIng.cobrado,
+      }
+      if (editIngId) await supabase.from('ingresos').update(payload).eq('id', editIngId)
+      else await supabase.from('ingresos').insert({ ...payload, origen: 'manual' })
+    } else {
+      // MODO CUOTAS: pago inicial (cobrado) + cuotas previstas
+      if (ingCuotas.length === 0) { alert('Generá las cuotas primero'); return }
+      const pagoInicial = Number(formIng.pago_inicial || 0)
+      const aCrear = []
+      if (pagoInicial > 0) {
+        aCrear.push({
+          fecha: formIng.fecha, concepto: `${formIng.concepto} — pago inicial`, cliente: formIng.cliente || null,
+          monto_bruto: pagoInicial, monto_neto: neto(pagoInicial), medio_pago: formIng.medio_pago,
+          comision_pct: com, nota: formIng.nota || null, cobrado: true, origen: 'manual',
+        })
+      }
+      ingCuotas.forEach((c, i) => {
+        aCrear.push({
+          fecha: c.fecha, concepto: `${formIng.concepto} — cuota ${i + 1}/${ingCuotas.length}`, cliente: formIng.cliente || null,
+          monto_bruto: Number(c.monto), monto_neto: neto(Number(c.monto)), medio_pago: formIng.medio_pago,
+          comision_pct: com, cobrado: false, origen: 'manual',
+        })
+      })
+      await supabase.from('ingresos').insert(aCrear)
     }
-    if (editIngId) await supabase.from('ingresos').update(payload).eq('id', editIngId)
-    else await supabase.from('ingresos').insert({ ...payload, origen: 'manual' })
-    setFormIng(emptyIng); setShowIng(false); setEditIngId(null)
+    setFormIng(emptyIng); setShowIng(false); setEditIngId(null); setIngModo('unico'); setIngCuotas([])
     fetchAll()
   }
 
@@ -261,9 +306,33 @@ export default function AccountingView() {
                 </select>
                 <input type="number" placeholder="% comisión" value={formIng.comision_pct} onChange={e => setFormIng({ ...formIng, comision_pct: e.target.value })} />
               </div>
+              {!editIngId && (
+                <div className="acc-modo-toggle">
+                  <button type="button" className={ingModo === 'unico' ? 'active' : ''} onClick={() => { setIngModo('unico'); setIngCuotas([]) }}>Pago único</button>
+                  <button type="button" className={ingModo === 'cuotas' ? 'active' : ''} onClick={() => setIngModo('cuotas')}>En cuotas</button>
+                </div>
+              )}
+              {ingModo === 'cuotas' && !editIngId && (
+                <div className="cierre-cuotas">
+                  <div className="acc-form-row">
+                    <input type="number" placeholder="Pagó ahora (inicial)" value={formIng.pago_inicial} onChange={e => setFormIng({ ...formIng, pago_inicial: e.target.value })} />
+                    <select onChange={e => generarIngCuotas(Number(e.target.value))} value={ingCuotas.length || ''}>
+                      <option value="">Generar cuotas…</option>
+                      {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} cuotas</option>)}
+                    </select>
+                  </div>
+                  {ingCuotas.map((c, i) => (
+                    <div key={i} className="cierre-cuota-row">
+                      <span className="cierre-cuota-n">#{i + 1}</span>
+                      <input type="number" value={c.monto} onChange={e => updateIngCuota(i, 'monto', e.target.value)} />
+                      <input type="date" value={c.fecha} onChange={e => updateIngCuota(i, 'fecha', e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <input placeholder="Nota (ej: pagó en pesos, TC 1450)" value={formIng.nota} onChange={e => setFormIng({ ...formIng, nota: e.target.value })} style={{ width: '100%', marginBottom: 8, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13 }} />
-              <label className="acc-check"><input type="checkbox" checked={formIng.cobrado} onChange={e => setFormIng({ ...formIng, cobrado: e.target.checked })} /> Ya cobrado (destildado = previsto)</label>
-              {formIng.monto_bruto && <div className="acc-neto-preview">Neto: {money(Number(formIng.monto_bruto) - Number(formIng.monto_bruto) * Number(formIng.comision_pct || 0) / 100)}</div>}
+              {(ingModo === 'unico' || editIngId) && <label className="acc-check"><input type="checkbox" checked={formIng.cobrado} onChange={e => setFormIng({ ...formIng, cobrado: e.target.checked })} /> Ya cobrado (destildado = previsto)</label>}
+              {(ingModo === 'unico' || editIngId) && formIng.monto_bruto && <div className="acc-neto-preview">Neto: {money(Number(formIng.monto_bruto) - Number(formIng.monto_bruto) * Number(formIng.comision_pct || 0) / 100)}</div>}
               <div className="acc-form-actions">
                 <button className="btn-cancel" onClick={() => { setShowIng(false); setEditIngId(null) }}>Cancelar</button>
                 <button className="btn-save" onClick={saveIngreso}>{editIngId ? 'Guardar cambios' : 'Guardar'}</button>

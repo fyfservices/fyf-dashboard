@@ -1037,3 +1037,12 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color
 .cob2-ficha.cob2-pronto { border-left-color: #ffa000 !important; background: rgba(255,160,0,.05) !important; }
 .cob2-ficha.cob2-futura { border-left-color: #5B9BD5 !important; }
 .cob2-ficha-dia { background: rgba(255,255,255,.06) !important; }
+
+
+/* ── Toggle único/cuotas en form de ingreso ──────── */
+.acc-modo-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+.acc-modo-toggle button {
+  flex: 1; padding: 7px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.acc-modo-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
