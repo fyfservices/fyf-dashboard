@@ -81,12 +81,16 @@ function Embudo({ leads }) {
 }
 
 // Modal de cierre
+const COMISION_MEDIO = { Stripe: 4.4, Transferencia: 0, Crypto: 0, Pesos: 0, Efectivo: 0, Otro: 0 }
+
 function ModalCierre({ lead, onClose, onSaved }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [ticket, setTicket] = useState(lead.ticket_total || '')
   const [modalidad, setModalidad] = useState(lead.modalidad_pago || 'pif')
   const [pagoLlamada, setPagoLlamada] = useState(lead.pago_llamada || '')
   const [concepto, setConcepto] = useState(lead.concepto_pago || 'fee')
+  const [medioPago, setMedioPago] = useState('Stripe')
+  const [comisionPct, setComisionPct] = useState(COMISION_MEDIO.Stripe)
   const [fechaPago, setFechaPago] = useState(lead.cerrado_at ? lead.cerrado_at.slice(0, 10) : hoy)
   const [cuotasList, setCuotasList] = useState([]) // [{monto, fecha}]
   const [saving, setSaving] = useState(false)
@@ -132,8 +136,8 @@ function ModalCierre({ lead, onClose, onSaved }) {
     if (Number(pagoLlamada) > 0) {
       aCrear.push({
         fecha: fechaPago, concepto: `${conceptoLabel} — ${lead.nombre}`, cliente: lead.nombre,
-        monto_bruto: Number(pagoLlamada), monto_neto: Number(pagoLlamada), medio_pago: 'Otro',
-        comision_pct: 0, cobrado: true, origen: 'crm', lead_id: lead.id,
+        monto_bruto: Number(pagoLlamada), monto_neto: Math.round(Number(pagoLlamada) * (1 - comisionPct / 100) * 100) / 100, medio_pago: medioPago,
+        comision_pct: comisionPct, cobrado: true, origen: 'crm', lead_id: lead.id,
       })
     }
     // Las cuotas como ingresos PREVISTOS
@@ -141,16 +145,16 @@ function ModalCierre({ lead, onClose, onSaved }) {
       cuotasList.forEach((c, i) => {
         aCrear.push({
           fecha: c.fecha, concepto: `Cuota ${i + 1}/${cuotasList.length} — ${lead.nombre}`, cliente: lead.nombre,
-          monto_bruto: Number(c.monto), monto_neto: Number(c.monto), medio_pago: 'Otro',
-          comision_pct: 0, cobrado: false, origen: 'crm', lead_id: lead.id,
+          monto_bruto: Number(c.monto), monto_neto: Math.round(Number(c.monto) * (1 - comisionPct / 100) * 100) / 100, medio_pago: medioPago,
+          comision_pct: comisionPct, cobrado: false, origen: 'crm', lead_id: lead.id,
         })
       })
     } else if (modalidad === 'pif' && saldo > 0) {
       // Si es PIF pero quedó saldo (pagó parte en llamada), el resto previsto para la fecha de pago
       aCrear.push({
         fecha: fechaPago, concepto: `Saldo PIF — ${lead.nombre}`, cliente: lead.nombre,
-        monto_bruto: saldo, monto_neto: saldo, medio_pago: 'Otro',
-        comision_pct: 0, cobrado: false, origen: 'crm', lead_id: lead.id,
+        monto_bruto: saldo, monto_neto: Math.round(saldo * (1 - comisionPct / 100) * 100) / 100, medio_pago: medioPago,
+        comision_pct: comisionPct, cobrado: false, origen: 'crm', lead_id: lead.id,
       })
     }
     if (aCrear.length) await supabase.from('ingresos').insert(aCrear)
@@ -194,6 +198,18 @@ function ModalCierre({ lead, onClose, onSaved }) {
         <div className="form-field" style={{ marginBottom: 10 }}>
           <label>Fecha del pago</label>
           <input type="date" value={fechaPago} onChange={e => setFechaPago(e.target.value)} />
+        </div>
+        <div className="form-grid" style={{ marginBottom: 10 }}>
+          <div className="form-field">
+            <label>Medio de pago</label>
+            <select value={medioPago} onChange={e => { setMedioPago(e.target.value); setComisionPct(COMISION_MEDIO[e.target.value] ?? 0) }}>
+              {Object.keys(COMISION_MEDIO).map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>% comisión pasarela</label>
+            <input type="number" value={comisionPct} onChange={e => setComisionPct(Number(e.target.value))} />
+          </div>
         </div>
 
         {modalidad === 'cuotas' && (
