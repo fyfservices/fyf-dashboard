@@ -13,6 +13,8 @@ const ESTADO_CLS = {
 }
 const CONCEPTO_LABEL = { fee: 'Fee de compromiso', primera_cuota: '1ra cuota', pif: 'PIF' }
 const RESPONSABLES = ['Fran', 'Feli']
+const CANAL_LABEL = { pauta: 'Pauta', referido: 'Referido', organico: 'Orgánico', prospeccion: 'Prospección' }
+const CANAL_COLOR = { pauta: '#4CAF50', referido: '#5B9BD5', organico: '#F5C842', prospeccion: '#9B7FE8' }
 
 function minutosDesde(fechaStr) {
   if (!fechaStr) return null
@@ -394,6 +396,52 @@ function AsignarBtn({ lead, onUpdate }) {
   )
 }
 
+// Modal para cargar un lead manualmente (otros canales)
+function ModalNuevoLead({ onClose, onSaved }) {
+  const [f, setF] = useState({ nombre: '', email: '', whatsapp: '', pais: '', rol: 'dueno', comisiones_mes: '2k_5k', invierte: 'si', canal: 'referido', asignado_a: '' })
+  const [saving, setSaving] = useState(false)
+  async function guardar() {
+    if (!f.nombre) { alert('Ingresá al menos el nombre'); return }
+    setSaving(true)
+    await supabase.from('leads').insert({
+      nombre: f.nombre, email: f.email || null, whatsapp: f.whatsapp || null, pais: f.pais || null,
+      rol: f.rol, comisiones_mes: f.comisiones_mes, invierte: f.invierte,
+      canal: f.canal, asignado_a: f.asignado_a || null,
+      calificado: true, estado: 'contactado', contactado_at: new Date().toISOString(),
+      origen: 'manual',
+    })
+    setSaving(false)
+    onSaved(); onClose()
+  }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+        <h3>Nuevo lead (carga manual)</h3>
+        <div className="form-grid" style={{ marginBottom: 10 }}>
+          <div className="form-field"><label>Nombre *</label><input value={f.nombre} onChange={e => setF({ ...f, nombre: e.target.value })} /></div>
+          <div className="form-field"><label>Canal</label><select value={f.canal} onChange={e => setF({ ...f, canal: e.target.value })}>{Object.entries(CANAL_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+        </div>
+        <div className="form-grid" style={{ marginBottom: 10 }}>
+          <div className="form-field"><label>Email</label><input value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></div>
+          <div className="form-field"><label>WhatsApp</label><input value={f.whatsapp} onChange={e => setF({ ...f, whatsapp: e.target.value })} /></div>
+        </div>
+        <div className="form-grid" style={{ marginBottom: 10 }}>
+          <div className="form-field"><label>País</label><input value={f.pais} onChange={e => setF({ ...f, pais: e.target.value })} /></div>
+          <div className="form-field"><label>Asignar a</label><select value={f.asignado_a} onChange={e => setF({ ...f, asignado_a: e.target.value })}><option value="">Sin asignar</option>{RESPONSABLES.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+        </div>
+        <div className="form-grid" style={{ marginBottom: 14 }}>
+          <div className="form-field"><label>Rol</label><select value={f.rol} onChange={e => setF({ ...f, rol: e.target.value })}>{Object.entries(ROL_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+          <div className="form-field"><label>Comisiones</label><select value={f.comisiones_mes} onChange={e => setF({ ...f, comisiones_mes: e.target.value })}>{Object.entries(COM_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+        </div>
+        <div className="form-actions">
+          <button className="btn-cancel" onClick={onClose}>Cancelar</button>
+          <button className="btn-save" onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : 'Agregar lead'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LeadsView() {
   const [leads, setLeads] = useState([])
   const [gastoCaptacion, setGastoCaptacion] = useState(0)
@@ -405,6 +453,7 @@ export default function LeadsView() {
   const [filtroAsignado, setFiltroAsignado] = useState('all')
   const [urgentes, setUrgentes] = useState([])
   const [cerrarLead, setCerrarLead] = useState(null)
+  const [nuevoLead, setNuevoLead] = useState(false)
 
   const fetchLeads = useCallback(async () => {
     const [{ data: ld }, { data: cfg }] = await Promise.all([
@@ -443,14 +492,30 @@ export default function LeadsView() {
   // Gasto de la campaña de captación (manual desde config)
   const gastoTotal = gastoCaptacion
 
-  // Métricas de dinero
+  // SOLO leads de PAUTA para métricas de ads (CPL, CAC, ROAS)
+  const esPauta = l => (l.canal || 'pauta') === 'pauta'
+  const totalPauta = base.filter(esPauta).length
+  const agendadosPauta = base.filter(l => esPauta(l) && l.agendado_at).length
+  const cerradosPauta = cerrados.filter(esPauta)
+  const nCerradosPauta = cerradosPauta.length
+  const ticketPauta = cerradosPauta.reduce((s, l) => s + Number(l.ticket_total || 0), 0)
+
+  // Métricas de dinero — facturación de TODOS los canales
   const ticketTotalSum = cerrados.reduce((s, l) => s + Number(l.ticket_total || 0), 0)
   const cashCollected = cerrados.reduce((s, l) => s + Number(l.pago_llamada || 0), 0)
   const aov = nCerrados > 0 ? ticketTotalSum / nCerrados : 0
-  const cpl = total > 0 && gastoTotal > 0 ? gastoTotal / total : 0
-  const costoPorAgenda = agendados > 0 && gastoTotal > 0 ? gastoTotal / agendados : 0
-  const cac = nCerrados > 0 && gastoTotal > 0 ? gastoTotal / nCerrados : 0
-  const roas = gastoTotal > 0 ? ticketTotalSum / gastoTotal : 0
+  // CPL, costo x agenda, CAC y ROAS: SOLO pauta (el gasto es solo de pauta)
+  const cpl = totalPauta > 0 && gastoTotal > 0 ? gastoTotal / totalPauta : 0
+  const costoPorAgenda = agendadosPauta > 0 && gastoTotal > 0 ? gastoTotal / agendadosPauta : 0
+  const cac = nCerradosPauta > 0 && gastoTotal > 0 ? gastoTotal / nCerradosPauta : 0
+  const roas = gastoTotal > 0 ? ticketPauta / gastoTotal : 0
+
+  // Desglose de facturación por canal
+  const factPorCanal = Object.keys(CANAL_LABEL).map(canal => ({
+    canal,
+    monto: cerrados.filter(l => (l.canal || 'pauta') === canal).reduce((s, l) => s + Number(l.ticket_total || 0), 0),
+    n: cerrados.filter(l => (l.canal || 'pauta') === canal).length,
+  })).filter(c => c.monto > 0)
 
   // Tasas
   const tasaContacto = total > 0 ? Math.round((contactados / total) * 100) : 0
@@ -496,12 +561,15 @@ export default function LeadsView() {
       )}
 
       {/* Filtro por responsable */}
-      <div className="leads-persona-filter">
-        {['all', ...RESPONSABLES].map(r => (
-          <button key={r} className={`persona-btn ${filtroAsignado === r ? 'active' : ''}`} onClick={() => setFiltroAsignado(r)}>
-            {r === 'all' ? 'Todos' : r}
-          </button>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="leads-persona-filter">
+          {['all', ...RESPONSABLES].map(r => (
+            <button key={r} className={`persona-btn ${filtroAsignado === r ? 'active' : ''}`} onClick={() => setFiltroAsignado(r)}>
+              {r === 'all' ? 'Todos' : r}
+            </button>
+          ))}
+        </div>
+        <button className="btn-nuevo-lead" onClick={() => setNuevoLead(true)}>+ Nuevo lead</button>
       </div>
 
       {/* KPIs embudo */}
@@ -551,6 +619,22 @@ export default function LeadsView() {
           <div style={{ marginTop: 16, fontSize: 12, color: 'var(--muted)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}><span>Facturado (tickets)</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{money(ticketTotalSum)}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Cobrado (en llamada)</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{money(cashCollected)}</span></div>
+            {factPorCanal.length > 0 && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Facturación por canal</div>
+                {factPorCanal.map(c => (
+                  <div key={c.canal} style={{ marginBottom: 7 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                      <span style={{ color: CANAL_COLOR[c.canal] }}>● {CANAL_LABEL[c.canal]} <span style={{ color: 'var(--muted)' }}>({c.n})</span></span>
+                      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{money(c.monto)}</span>
+                    </div>
+                    <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${ticketTotalSum > 0 ? (c.monto / ticketTotalSum * 100) : 0}%`, background: CANAL_COLOR[c.canal], borderRadius: 2 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="leads-card">
@@ -587,13 +671,14 @@ export default function LeadsView() {
                 <th>Estado</th>
                 <th>Acción</th>
                 <th>Cierre</th>
+                <th>Canal</th>
                 <th>Campaña</th>
                 <th>Recibido</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>Sin resultados</td></tr>
               )}
               {filtered.map(l => (
                 <tr key={l.id} className={l.estado === 'descartado' || l.estado === 'perdido' ? 'lead-tachado' : ''}>
@@ -631,6 +716,9 @@ export default function LeadsView() {
                     ) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
                   </td>
                   <td>
+                    <span className="canal-badge" style={{ background: (CANAL_COLOR[l.canal || 'pauta'] || '#888') + '22', color: CANAL_COLOR[l.canal || 'pauta'] || '#888' }}>{CANAL_LABEL[l.canal || 'pauta'] || l.canal}</span>
+                  </td>
+                  <td>
                     {l.utm_campaign || l.utm_content ? (
                       <div>
                         {l.utm_campaign && <div className="lead-nombre">{l.utm_campaign}</div>}
@@ -649,6 +737,7 @@ export default function LeadsView() {
       </div>
 
       {cerrarLead && <ModalCierre lead={cerrarLead} onClose={() => setCerrarLead(null)} onSaved={fetchLeads} />}
+      {nuevoLead && <ModalNuevoLead onClose={() => setNuevoLead(false)} onSaved={fetchLeads} />}
     </div>
   )
 }
